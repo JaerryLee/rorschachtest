@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <title>로르샤흐연구회</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge"/> <!-- 호환성 설정-->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=0,maximum-scale=10">
+  <script src="https://unpkg.com/htmx.org@1.9.6" integrity="sha384-FhXw7b6AlE/jyjlZH5iHa/tTe9EpJ1Y55RjcgPbjeWMskSxZt1v9qkxLJWNJaGni" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/autosize.js/4.0.2/autosize.min.js"></script>
+
+
+  <style>
+   .container-wrapper {
+        display: grid;
+        grid-template-rows: auto 1fr;
+    }
+.table-wrapper {
+  height:300px;
+    width: 100%;
+  overflow: auto;
+}
+.table-wrapper2 {
+  height:250px;
+    overflow: auto;
+    width: 100%;
+}
+  table {
+    border-collapse: collapse;
+    width: auto;
+    border: 1px solid black;
+    font-size: small;
+      max-width: none;
+      overflow-x: scroll;
+  }
+  th, td {
+    border: 1px solid black;
+    padding: 0;
+    text-align: center;
+  }
+
+  th {
+    background-color: #f2f2f2;
+      position: sticky;
+      top: -1px;
+  }
+
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    white-space: normal;
+  }
+textarea:focus{
+    outline: none;
+}
+button {
+  margin: 0;
+}
+.custom-btn {
+  width: 130px;
+  height: 40px;
+  color: #fff;
+  border-radius: 5px;
+  padding: 10px 25px;
+  font-family: 'Lato', sans-serif;
+  font-weight: 500;
+  white-space: nowrap;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  display: inline-block;
+   box-shadow:inset 2px 2px 2px 0 rgba(255,255,255,.5),
+   7px 7px 20px 0 rgba(0,0,0,.1),
+   4px 4px 5px 0 rgba(0,0,0,.1);
+  outline: none;
+}
+.form-control {
+    font-size: 12px;
+    padding: 5px;/* 원하는 크기로 조절 */
+}
+.image-container {
+    display: flex;
+    flex-wrap: wrap;
+    max-height: 270px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+        .image-container .hover {
+            box-sizing: border-box;
+            margin: 5px;
+            overflow: hidden;
+            width: calc(25% - 10px); /* 이미지 컨테이너의 너비 설정 */
+        }
+
+        .image-container img {
+            max-width: 100%; /* 부모 컨테이너의 너비에 맞게 이미지 크기 조절 */
+            height: auto; /* 비율 유지 */
+            transition: transform 0.3s ease; /* 확대/축소 효과 설정 */
+            display: block; /* 블록 요소로 설정하여 여백 지정 */
+        }
+        .image-container .hover:hover {
+    z-index: 2; /* Increase the z-index when hovered to appear above other elements */
+  }
+  .image-container .hover:hover img {
+    width: 47%; /* Set the width to 400px when zoomed in */
+    max-width: none; /* Allow the width to grow beyond its original size */
+    height: auto; /* Maintain the aspect ratio */
+      left: 49%; /* Move the image to the center horizontally */
+    top: 50%; /* Move the image to the center vertically */
+      transform: translate(-50%, -50%);
+    position: absolute; /* Position the enlarged image absolutely within its container */
+    z-index: 2; /* Increase the z-index to appear above other elements */
+  }
+  .image-container .empty-image {
+    background-color: #ffffff; /* 하얀색 배경 설정 */
+    box-sizing: border-box;
+      margin: 5px;
+      overflow: hidden;
+      width: calc(25% - 10px);
+      color: white;
+  font-size: 70px;
+      text-align: center;
+}
+.col-md-1, .col-md-2, .col-md-3, .col-md-6{
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+/* 1 */
+.btn-1 {
+  background: rgb(6,14,131);
+  background: linear-gradient(0deg, rgba(6,14,131,1) 0%, rgba(12,25,180,1) 100%);
+  border: none;
+}
+.btn-1:hover {
+   background: rgb(0,3,255);
+background: linear-gradient(0deg, rgba(0,3,255,1) 0%, rgba(2,126,251,1) 100%);
+}
+.text-danger {
+        white-space: normal; /* 에러 메시지가 여러 줄로 나뉘도록 설정 */
+    }
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
+</style>
+</head>
+<body style="overflow-x:auto; overflow-y: hidden; margin:0; padding:0;">
+<div class="container-wrapper">
+<div class="container-fluid">
+    <div class="table-wrapper table-sm">
+<form method="post" id="input-form" autocomplete="off">
+  {% csrf_token %}
+  {{ formset.management_form }}
+  <div class="table-wrapper2">
+  <table id="response" class="table table-bordered" style="white-space: nowrap;
+    max-height: 600px; min-width:1200px; overflow: auto;">
+    <thead>
+      <tr>
+        <th style="width:4%;" data-toggle="tooltip" data-placement="bottom" title="로마 또는 아라비아 숫자" data-delay="10">카드</th>
+        <th style="width:3%;">N</th>
+        <th style="width:3.5%;">시간</th>
+        <th style="width:13%;">반응</th>
+        <th style="width:25%;">질문</th>
+        <th style="width:2%;" data-toggle="tooltip" data-placement="bottom" title="<:왼쪽, >:오른쪽, v:180도" data-delay="10">회전</th>
+        <th style="width:3%;">반응영역</th>
+        <th style="width:3%;">발달질</th>
+        <th style="width:2%;">영역번호</th>
+        <th style="width:7%;">결정인</th>
+        <th style="width:3%;">형태질</th>
+        <th style="width:3%;">(2)</th>
+        <th style="width:7%;">내용인</th>
+        <th style="width:3%;">P</th>
+        <th style="width:4%;">Z</th>
+        <th style="width:7%;" data-toggle="tooltip" data-placement="bottom" title="PHR,GHR은 자동채점" data-delay="10">특수점수</th>
+        <th style="width:7%;">코멘트</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% load widget_tweaks %}
+      {% for form in formset %}
+        <tr>
+          {% for field in form %}
+          <td>
+            {% render_field field class="form-control" %}
+            {% for error in field.errors %}
+              <span class="text-danger">{{ error }}</span>
+            {% endfor %}
+          </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+  </table>
+    </div>
+      <input type="hidden" value="false" name="additems" id="additems">
+    <input type="hidden" value="false" name="tempsave" id="tempsave">
+    <div class="d-flex justify-content-end" style="margin-top: 10px;">
+    <button class="btn btn-primary mx-2" id="additemsbutton" onclick="addItems()">행 추가</button>
+    <input type="submit" class="btn btn-primary mx-2" value="저장하기">
+  </div>
+</form>
+</div>
+  <div class="row">
+  <div class="col-md-6" style="margin-bottom:0">
+  {% load widget_tweaks %}
+  <form hx-get="/search_results" hx-target = "#search-results" autocomplete="off">
+        <div class="d-flex flex-row" style="margin-bottom:0">
+        <div class="form-group col-md-1">
+          {{ filter.form.Card.label_tag }}
+          {% render_field filter.form.Card class="form-control" %}
+        </div>
+        <div class="form-group col-md-1">
+          {{ filter.form.LOC.label_tag }}
+          {% render_field filter.form.LOC class="form-control" %}
+        </div>
+        <div class="form-group col-md-1">
+          {{ filter.form.Cont.label_tag }}
+          {% render_field filter.form.Cont class="form-control" %}
+        </div>
+        <div class="form-group col-md-1">
+          {{ filter.form.FQ.label_tag }}
+          {% render_field filter.form.FQ class="form-control" %}
+        </div>
+          <div class="form-group col-md-3">
+          {{ filter.form.Determinants.label_tag }}
+          {% render_field filter.form.Determinants class="form-control" %}
+        </div>
+          <div class="form-group col-md-2">
+          {{ filter.form.Item.label_tag }}
+          {% render_field filter.form.Item class="form-control" %}
+        </div>
+          <div class="form-group col-md-1">
+          &lt;{{ filter.form.V.label_tag }}
+          {% render_field filter.form.V class="form-control" %}
+        </div>
+        <button type="submit" class="custom-btn btn-1" style="margin-top:28px; margin-left:10px">
+        <span class="glyphicon glyphicon-search"></span> 검색
+      </button>
+        </div>
+        </form></div>
+    <div class="col-md-6" style="margin-bottom: 0; margin-top:20px">
+    </div>
+    </div>
+  </div>
+ <div id="search-results" class="container-fluid" style="margin-top:0">
+        <hr style="border-top:1px dotted #ccc; margin-top: 0; margin-bottom: 10px;"/>
+        {% block content %}
+
+        {% endblock %}
+ </div>
+</div>
+<script>
+function addItems() {
+  // additems element의 값을 "true"로 변경
+  document.getElementById('additems').value = 'true';
+}
+autosize(document.querySelectorAll('textarea'));
+$(document).ready(function(){
+  $('[data-toggle="tooltip"]').tooltip();
+});
+</script>
+</body>
+</html>
+

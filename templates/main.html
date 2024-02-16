@@ -1,0 +1,194 @@
+<!doctype html>
+{% load static %}
+<html lang="ko">
+<head>
+  <title>로르샤흐연구회</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge"/> <!-- 호환성 설정-->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=0,maximum-scale=10">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <style>
+    body {
+      background-color: #FFFFFF;
+      margin-top: 150px;
+    }
+    .navbar {
+      background-color: #FFFFFF;
+      height: 150px;
+      border-bottom: 2px solid rgba(0, 0, 0, 0.2);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      position: fixed;
+      width: 100%;
+      top: 0;
+      z-index: 1000;
+    }
+    .navbar img {
+      margin-right: 2px;
+      height: 80px;
+    }
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      color: #000000;
+      font-weight: bold;
+      font-size: 22px;
+      letter-spacing: -2px;
+    }
+    .navbar-toggler {
+      margin-right: 20px;
+    }
+    .navbar-nav {
+      margin-left: auto;
+    }
+    .navbar-nav .nav-link {
+      font-size: 18px;
+      color: #000000;
+      font-weight: bold;
+    }
+    .navbar-nav .nav-item {
+      margin-right: 26px;
+    }
+    .dropdown-menu {
+      background-color: #0091EA;
+    }
+    .dropdown-item {
+      font-size: 16px;
+      color: white;
+    }
+    .page-content {
+      padding: 20px;
+      text-align: center;
+    }
+    .btn-primary {
+      background-color: #0091EA;
+      border-color: #0091EA;
+      margin-right: 0px;
+    }
+    .fixed-footer {
+    background-color: #0091EA;
+    opacity: 0.6;
+    color: #FFFFFF;
+    text-align: center;
+    height: 60px;
+    width: 100%;
+    padding-bottom: 0;
+  }
+  #wrapper {
+    min-height: 100vh;
+    height: auto;
+    padding-bottom: 30px;
+    position: relative;
+    margin-bottom: -30px;
+  }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg justify-content-end">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="{% url 'main' %}">
+        <img src="/static/image/로고.jpg" alt="로르샤흐 연구회 로고">
+        로르샤흐 연구회
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav">
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="researchDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">연구회 소개</a>
+            <ul class="dropdown-menu" aria-labelledby="researchDropdown">
+              <li><a class="dropdown-item" href="{% url 'greeting' %}">인사말</a></li>
+              <li><a class="dropdown-item" href="{% url 'about' %}">연구회 소개</a></li>
+              <li><a class="dropdown-item" href="{% url 'register' %}">가입 신청</a></li>
+            </ul>
+          </li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="eventsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">학술행사</a>
+            <ul class="dropdown-menu" aria-labelledby="eventsDropdown">
+              <li><a class="dropdown-item" href="{% url 'plan' %}">연간활동계획</a></li>
+            </ul>
+          </li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="activityDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">연구활동</a>
+            <ul class="dropdown-menu" aria-labelledby="activityDropdown">
+              <li><a class="dropdown-item" href="#">논문</a></li>
+            </ul>
+          </li>
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="noticeDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">커뮤니티</a>
+            <ul class="dropdown-menu" aria-labelledby="noticeDropdown">
+              <li><a class="dropdown-item" href="{% url 'board:notice' %}">공지사항</a></li>
+              <li><a class="dropdown-item" href="{% url 'board:beginner_board' %}">초급</a></li>
+              <li><a class="dropdown-item" href="{% url 'board:intermediate_board' %}">중급</a></li>
+            </ul>
+          </li>
+          <li class="nav-item dropdown">
+    <a class="nav-link dropdown-toggle" href="#" id="gradingDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">로르샤흐 채점</a>
+    <ul class="dropdown-menu" aria-labelledby="gradingDropdown">
+        {% if user.is_authenticated %}
+            <li><a class="dropdown-item" href="{% url 'client_info' %}" id="scoring">채점하기</a></li>
+            <li><a class="dropdown-item" href="{% url 'client_list' %}" id="result">검사목록</a></li>
+        {% else %}
+            <li><span class="dropdown-item disabled">채점하기</span></li>
+            <li><span class="dropdown-item disabled">검사목록</span></li>
+        {% endif %}
+    </ul>
+</li>
+
+          {% if not user.is_authenticated %} <!--유저가 로그인이 안 되었으면-->
+            <li class="nav-item">
+              <a class="btn btn-primary" href="{% url 'login' %}?next={{ request.path }}">로그인</a>
+            </li>
+            <li class="nav-item">
+              <a class="btn btn-primary" href="{% url 'signup' %}">회원가입</a>
+            </li>
+          {% else %}
+            <li class="nav-item">
+              <a class="btn btn-primary" href="{% url 'logout' %}">로그아웃</a>
+            </li>
+          {% endif %}
+        </ul>
+      </div>
+    </div>
+  </nav>
+  <div id="wrapper">
+  <div class="page-content">
+    {% block content %}
+    <style>
+      .container {
+            position: relative;
+            display: inline-block;
+        }
+    .text-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: black;
+    font-size: 3.5vw;
+    font-family: Arial, sans-serif;
+    padding: 10px;
+    max-font-size: 20px;
+    min-font-size: 14px;
+    margin-right: 10px;
+    text-align: left;
+  }
+    </style>
+    <div class="container">
+    <img src="/static/image/로르샤흐_main.jpg" alt="메인 이미지" width="80%">
+      <div class="text-overlay" style="text-align:center">
+        로르샤흐 연구회
+      </div>
+      </div>
+    {% endblock %}
+  </div>
+  </div>
+<footer class="fixed-footer">
+    <a href="{% url 'service' %}" style="color:white; font-size:18px;">이용약관</a>
+    <span style="margin-left: 20px; margin-right: 20px;">|</span>
+    <a href="{% url 'privacy_policy' %}" style="color:white; font-size:18px;">개인정보 처리방침</a>
+    <p>Korean Rorschach Association</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,98 @@
+{% extends 'main.html' %}
+
+{% block content %}
+  <div class="post-detail">
+    <h2 style="text-align: left;">{{ post.title }}</h2>
+    <p style="text-align: left; font-weight: bold;">작성자: {{ post.author.username }} | 작성일: {{ post.created_at }}</p>
+    <p style="text-align: left;">{{ post.content }}</p>
+
+      {% if can_delete %}
+    <form method="post" action="{% url 'board:delete_post' post.id %}" style="display: inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger" style="float: right;">삭제</button>
+    </form>
+      <br>
+  {% endif %}
+
+    <div class="comment-box" style="text-align: left; margin-top: 20px;">
+    <h5>답글 작성</h5>
+    <form method="post" action="{% url 'board:post_detail' post.id %}">
+        {% csrf_token %}
+        <div class="form-group">
+            <textarea class="form-control" id="comment" name="content" rows="3" oninput="autoResize(this)"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" style="float: right">답글 작성</button>
+    </form>
+</div>
+    <div class="comments" style="text-align: left; margin-top: 10px;">
+      {% for comment in comments %}
+        <div class="comment">
+          <p style="font-weight: bold;">{{ comment.author.username }} - {{ comment.created_at }}</p>
+          <p>{{ comment.content }}</p>
+        </div>
+      {% endfor %}
+    </div>
+      <div class="back-buttons">
+      {% if post.group == 'beginner' %}
+        <a href="{% url 'board:beginner_board' %}" class="btn btn-secondary">목록보기</a>
+      {% elif post.group == 'intermediate' %}
+        <a href="{% url 'board:intermediate_board' %}" class="btn btn-secondary">목록보기</a>
+      {% endif %}
+    </div>
+  </div>
+
+<script>
+    function autoResize(element) {
+        element.style.height = "auto";
+        element.style.height = (element.scrollHeight) + "px";
+    }
+</script>
+
+
+  <style>
+    .post-detail {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .comments {
+      margin-top: 20px;
+    }
+
+    .comment {
+      background-color: #f2f2f2;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+    }
+
+    .comment-box {
+      margin-top: 20px;
+      padding: 20px;
+      background-color: #f2f2f2;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      margin-bottom: 5px;
+      display: block;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+  </style>
+{% endblock %}
+

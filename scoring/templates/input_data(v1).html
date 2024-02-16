@@ -1,0 +1,283 @@
+<style>
+.table-wrapper {
+  height:200px;
+  overflow: auto;
+}
+.nopadding {
+   padding: 0 !important;
+   margin: 0 !important;
+}
+.img_hover:hover img{
+  transform: scale(2)
+}
+</style>
+{% extends 'base.html' %}
+
+{% load widget_tweaks %}
+
+{% block content %}
+  <form method="get">
+    <div class="row">
+      <div class="col-md-6">
+        <div class="d-flex flex-row">
+        <div class="form-group mr-1">
+          {{ filter.form.Card.label_tag }}
+          {% render_field filter.form.Card class="form-control" %}
+        </div>
+        <div class="form-group mr-1">
+          {{ filter.form.LOC.label_tag }}
+          {% render_field filter.form.LOC class="form-control" %}
+        </div>
+        <div class="form-group mr-1">
+          {{ filter.form.Cont.label_tag }}
+          {% render_field filter.form.Cont class="form-control" %}
+        </div>
+        <div class="form-group mr-1">
+          {{ filter.form.FQ.label_tag }}
+          {% render_field filter.form.FQ class="form-control" %}
+        </div>
+          <div class="form-group col-sm-4 mr-1 nopadding">
+          {{ filter.form.Determinants.label_tag }}
+          {% render_field filter.form.Determinants class="form-control" %}
+        </div>
+          <div class="form-group col-sm-2 mr-1 nopadding">
+          {{ filter.form.Item.label_tag }}
+          {% render_field filter.form.Item class="form-control" %}
+        </div>
+          <div class="form-group mr-1">
+          &lt;{{ filter.form.V.label_tag }}
+          {% render_field filter.form.V class="form-control" %}
+        </div>
+        <button type="submit" class="custom-btn btn-1">
+        <span class="glyphicon glyphicon-search"></span> 검색
+      </button>
+        </div>
+          <div class="table-wrapper">
+  <table class="table table-bordered table-sm">
+    <thead>
+      <tr>
+        <th>Card</th>
+        <th>LOC</th>
+        <th>Cont</th>
+        <th>FQ</th>
+        <th>Determinants</th>
+        <th>Item</th>
+        <th>&lt;V</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for SearchReference in filter.qs %}
+        <tr>
+          <td>{{ SearchReference.Card }}</td>
+          <td>{{ SearchReference.LOC }}</td>
+          <td>{{ SearchReference.Cont }}</td>
+          <td>{{ SearchReference.FQ }}</td>
+          <td>{{ SearchReference.Determinants }}</td>
+          <td>{{ SearchReference.Item }}</td>
+          <td>{{ SearchReference.V }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5">No data</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+      </div>
+  </div>
+      <div class="col-md-6">
+        <div class="table-wrapper" style="height:auto">
+  <table class="table table-bordered table-sm">
+    <thead>
+      <tr>
+        <th>P</th>
+        <th>Z점수</th>
+      </tr>
+    </thead>
+    <tbody>
+  {% for PopularResponse in p_response_filter.qs %}
+    {% if forloop.first %} <!-- 첫 번째 데이터만 표시 -->
+      <tr>
+        <td>{{ PopularResponse.p }}</td>
+        <td>{{ PopularResponse.Z }}</td>
+      </tr>
+    {% endif %}
+  {% empty %}
+    <tr>
+      <td colspan="2">No data</td>
+    </tr>
+  {% endfor %}
+</tbody>
+  </table>
+      </div>
+        <div class="d-flex flex-row">
+{% if image_filter.qs %}
+    <ul>
+        {% for image in image_filter.qs %}
+      <div class="img_hover" style = "float:left">
+            <img src="{{ image.img_file.url }}" alt="Image" width="200" height="160">
+        </div>
+        {% endfor %}
+    </ul>
+{% endif %}
+        </div>
+</div>
+    </div>
+  </form>
+{% endblock %}
+
+
+
+//기록용
+<div class="table-wrapper table-sm">
+<table id="data-table" class="table table-bordered" style="white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;">
+  <thead>
+  <tr>
+    <th>Card</th>
+    <th>Num</th>
+    <th>Time</th>
+    <th>Response</th>
+    <th>Inquiry</th>
+    <th>형태질 채점단어</th>
+    <th>카드방향</th>
+    <th>반응영역</th>
+    <th>영역번호</th>
+    <th>결정인</th>
+    <th>형태질</th>
+    <th>2</th>
+    <th>내용</th>
+    <th>P</th>
+    <th>Z</th>
+    <th>코멘트</th>
+  </tr>
+  </thead>
+  <tr>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+  </tr>
+  <tr>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+  </tr>
+  <tr>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+  </tr>
+  <tr>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+  </tr>
+  <tr>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+  </tr>
+  <tr>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+  </tr>
+  <tr>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+    <td><textarea class="textarea" style="border:0; resize:none"></textarea></td>
+  </tr>
+</table>
+ </div>

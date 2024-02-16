@@ -1,0 +1,70 @@
+{% extends 'main.html' %}
+
+{% block content %}
+<script>
+    function adjustTextareaHeight(element) {
+        element.style.height = 'auto';
+        element.style.height = (element.scrollHeight) + 'px';
+    }
+</script>
+
+<style>
+    body {
+        background-color: #f2f2f2;
+        margin: 0;
+        padding-top: 100px; /* Add padding for the navbar */
+    }
+
+    .form-container {
+        max-width: 1000px;
+        width: 100%; /* Adjust as needed for responsiveness */
+        background-color: #fff;
+        padding: 50px;
+        border-radius: 5px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        margin: 50px auto; /* Center horizontally and add margin at the top */
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        margin-bottom: 5px;
+        display: block;
+        text-align: left;
+    }
+
+    .create-button {
+        text-align: right;
+    }
+
+    #content, #title {
+        width: 100%; /* Ensure the textarea takes full width */
+        resize: none; /* Disable resizing */
+        overflow-y: auto; /* Show vertical scrollbar when needed */
+    }
+</style>
+
+<div class="form-container">
+    <h2 style="font-weight:border">글쓰기</h2><br>
+    <form method="post" action="{% url 'board:create_post' group=group %}">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="title">제목</label>
+            <input type="text" class="form-control" id="title" name="title" oninput="adjustTextareaHeight(this)">
+        </div>
+        <div class="form-group">
+            <label for="content">본문</label>
+            <textarea class="form-control" id="content" name="content" rows="8" oninput="adjustTextareaHeight(this)"></textarea>
+        </div>
+        <div class="create-button">
+            <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}
+
+
+

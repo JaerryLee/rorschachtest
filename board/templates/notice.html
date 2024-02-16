@@ -1,0 +1,52 @@
+{% extends 'main.html' %}
+
+{% block content %}
+  <h2>공지사항</h2>
+
+  <!-- 검색 기능 추가 -->
+  <div style="text-align: right; margin-bottom: 10px;">
+    <form method="get" action="{% url 'board:notice' %}">
+      <input type="text" name="search" placeholder="검색어 입력" value="{{ search_query }}">
+      <button type="submit">검색</button>
+    </form>
+  </div>
+
+  <!-- 게시글 목록 테이블 추가 -->
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col" style="text-align: left;">제목</th>
+        <th scope="col" style="text-align: right;">작성자</th>
+        <th scope="col" style="text-align: right;">작성 시간</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for notice in notices %}
+        <tr>
+          <td><a href="{% url 'board:notice_detail' notice.id %}">{{ notice.title }}</a></td>
+          <td style="text-align: right;">{{ notice.author.username }}</td>
+          <td style="text-align: right;">{{ notice.created_at }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- 페이지네이션 추가 -->
+  <div class="pagination">
+    <span class="step-links">
+      {% if notices.has_previous %}
+        <a href="?search={{ search_query|urlencode }}&page=1">&laquo; first</a>
+        <a href="?search={{ search_query|urlencode }}&page={{ notices.previous_page_number }}">previous</a>
+      {% endif %}
+
+      <span class="current">
+        페이지 {{ notices.number }} / {{ notices.paginator.num_pages }}
+      </span>
+
+      {% if notices.has_next %}
+        <a href="?search={{ search_query|urlencode }}&page={{ notices.next_page_number }}">next</a>
+        <a href="?search={{ search_query|urlencode }}&page={{ notices.paginator.num_pages }}">last &raquo;</a>
+      {% endif %}
+    </span>
+  </div>
+{% endblock %}

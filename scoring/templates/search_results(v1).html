@@ -1,0 +1,163 @@
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge"/> <!-- 호환성 설정-->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=0,maximum-scale=10">
+  <script src="https://unpkg.com/htmx.org@1.9.6" integrity="sha384-FhXw7b6AlE/jyjlZH5iHa/tTe9EpJ1Y55RjcgPbjeWMskSxZt1v9qkxLJWNJaGni" crossorigin="anonymous"></script>
+</head>
+<style>
+  #image-list {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .image-item {
+    flex: 0 0 calc(50% - 10px); /* 2개씩 보이도록 설정 */
+    margin: 5px;
+  }
+
+  #prev-button,
+  #next-button {
+    margin-top: 10px;
+  }
+.table-wrapper {
+  height:200px;
+  overflow: auto;
+}
+.nopadding {
+   padding: 0 !important;
+   margin: 0 !important;
+}
+
+</style>
+<body>
+    <div id="search-results" class="row">
+      <div class="col-md-6">
+        <table class="table table-bordered table-sm">
+    <thead>
+      <tr>
+        <th>P</th>
+        <th>Z점수</th>
+      </tr>
+    </thead>
+    <tbody>
+  {% for PopularResponse in p_response_filter.qs %}
+    {% if forloop.first %} <!-- 첫 번째 데이터만 표시 -->
+      <tr>
+        <td>{{ PopularResponse.p }}</td>
+        <td>{{ PopularResponse.Z }}</td>
+      </tr>
+    {% endif %}
+  {% empty %}
+    <tr>
+      <td colspan="2">No data</td>
+    </tr>
+  {% endfor %}
+</tbody>
+  </table>
+          <div class="table-wrapper" style="height:200px">
+  <table class="table table-bordered table-sm">
+    <thead>
+      <tr>
+        <th>Card</th>
+        <th>LOC</th>
+        <th>Cont</th>
+        <th>FQ</th>
+        <th>Determinants</th>
+        <th>Item</th>
+        <th>&lt;V</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for SearchReference in filter.qs %}
+        <tr>
+          <td>{{ SearchReference.Card }}</td>
+          <td>{{ SearchReference.LOC }}</td>
+          <td>{{ SearchReference.Cont }}</td>
+          <td>{{ SearchReference.FQ }}</td>
+          <td>{{ SearchReference.Determinants }}</td>
+          <td>{{ SearchReference.Item }}</td>
+          <td>{{ SearchReference.V }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5">No data</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+      </div>
+  </div>
+      <div class="col-md-6">
+        <div class="table-wrapper" style="height:auto">
+      <div class="d-flex flex-row">
+    {% if image_filter.qs %}
+        <ul>
+            {% for image in image_filter.qs %}
+                <div class="image-item" style="float: left;" style="position: relative;">
+                    <img src="{{ image.img_file.url }}" alt="Image" width="300" height="220">
+                </div>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</div>
+<button id="next-button" style="position: absolute; bottom: 20px; right: 30px;">Next</button>
+            <p id="imageSet" style="position: absolute; bottom: 60px; right: 30px;"></p>
+</div>
+      </div></div>
+        <script>
+            var DOMReady = function(callback) {
+  document.readyState === "interactive" || document.readyState === "complete" ? callback() : document.addEventListener("DOMContentLoaded", callback);
+};
+            DOMReady(function () {
+          var imgItems = document.querySelectorAll(".image-item");
+          var nextButton = document.getElementById("next-button");
+          var imageSet = 1;
+          document.getElementById("imageSet").innerHTML = imageSet+"/3";
+
+          // 초기 이미지 세트 설정
+          updateImageSet();
+
+          nextButton.addEventListener("click", function (event) {
+            event.preventDefault(); // 새로고침 방지
+
+            // 이미지 세트 업데이트
+            if (imageSet === 3) {
+              imageSet = 1;
+              document.getElementById("imageSet").innerHTML = imageSet+"/3";
+            } else {
+              imageSet++;
+              document.getElementById("imageSet").innerHTML = imageSet+"/3";
+            }
+            updateImageSet();
+          });
+
+          function updateImageSet() {
+            // 모든 이미지 숨기기
+            imgItems.forEach(function (item) {
+              item.style.display = "none";
+            });
+
+            // 현재 이미지 세트의 이미지만 표시
+            var startIndex = (imageSet - 1) * 2;
+            for (var i = startIndex; i < startIndex + 2; i++) {
+              if (i < imgItems.length) {
+                imgItems[i].style.display = "block";
+              }
+            }
+          }
+        });
+             </script>
+</body>
+
+
+
+
+
+
+
+
+
+

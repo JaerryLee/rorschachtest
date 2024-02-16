@@ -1,0 +1,101 @@
+<style>
+.table-wrapper {
+  height:200px;
+  overflow: auto;
+}
+.nopadding {
+   padding: 0 !important;
+   margin: 0 !important;
+}
+
+</style>
+
+{% extends 'base.html' %}
+
+{% load widget_tweaks %}
+
+{% block content %}
+    <div id="search-results" class="row">
+      <div class="col-md-6">
+        <table class="table table-bordered table-sm">
+    <thead>
+      <tr>
+        <th>P</th>
+        <th>Z점수</th>
+      </tr>
+    </thead>
+    <tbody>
+  {% for PopularResponse in p_response_filter.qs %}
+    {% if forloop.first %} <!-- 첫 번째 데이터만 표시 -->
+      <tr>
+        <td>{{ PopularResponse.p }}</td>
+        <td>{{ PopularResponse.Z }}</td>
+      </tr>
+    {% endif %}
+  {% empty %}
+    <tr>
+      <td colspan="2">No data</td>
+    </tr>
+  {% endfor %}
+</tbody>
+  </table>
+          <div class="table-wrapper" style="height:200px">
+  <table class="table table-bordered table-sm">
+    <thead>
+      <tr>
+        <th>Card</th>
+        <th>LOC</th>
+        <th>Cont</th>
+        <th>FQ</th>
+        <th>Determinants</th>
+        <th>Item</th>
+        <th>&lt;V</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for SearchReference in filter.qs %}
+        <tr>
+          <td>{{ SearchReference.Card }}</td>
+          <td>{{ SearchReference.LOC }}</td>
+          <td>{{ SearchReference.Cont }}</td>
+          <td>{{ SearchReference.FQ }}</td>
+          <td>{{ SearchReference.Determinants }}</td>
+          <td>{{ SearchReference.Item }}</td>
+          <td>{{ SearchReference.V }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5">No data</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+      </div>
+  </div>
+      <div class="col-md-6">
+        <div class="table-wrapper" style="height:auto">
+      <div class="d-flex flex-row">
+    {% if image_filter.qs %}
+        <ul>
+            {% for image in image_filter.qs %}
+                <div class="img-item" style="float: left;" style="position: relative;">
+                    <img src="{{ image.img_file.url }}" alt="Image" width="300" height="220">
+                </div>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</div>
+<button id="next-button" style="position: absolute; bottom: 20px; right: 30px;">Next</button>
+</div>
+    </div>
+{% endblock %}
+
+
+
+
+
+
+
+
+
+

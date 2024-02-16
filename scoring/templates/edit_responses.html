@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <title>로르샤흐연구회</title>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge"/> <!-- 호환성 설정-->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=0,maximum-scale=10">
+  <script src="https://unpkg.com/htmx.org@1.9.6" integrity="sha384-FhXw7b6AlE/jyjlZH5iHa/tTe9EpJ1Y55RjcgPbjeWMskSxZt1v9qkxLJWNJaGni" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/autosize.js/4.0.2/autosize.min.js"></script>
+
+
+  <style>
+   .container-wrapper {
+        display: grid;
+        grid-template-rows: 1fr 1fr; /* 두 개의 행을 동일한 크기로 설정 */
+    }
+.table-wrapper {
+  height:300px;
+    width: 100%;
+  overflow: auto;
+}
+.table-wrapper2 {
+  height:250px;
+    overflow: auto;
+    width: 100%;
+}
+  table {
+    border-collapse: collapse;
+    width: auto;
+    border: 1px solid black;
+    font-size: small;
+      max-width: none;
+      overflow-x: scroll;
+  }
+  th, td {
+    border: 1px solid black;
+    padding: 0;
+    text-align: center;
+  }
+
+  th {
+    background-color: #f2f2f2;
+      position: sticky;
+      top: -1px;
+  }
+
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    white-space: normal;
+  }
+textarea:focus{
+    outline: none;
+}
+button {
+  margin: 0;
+}
+.custom-btn {
+  width: 130px;
+  height: 40px;
+  color: #fff;
+  border-radius: 5px;
+  padding: 10px 25px;
+  font-family: 'Lato', sans-serif;
+  font-weight: 500;
+  white-space: nowrap;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  display: inline-block;
+   box-shadow:inset 2px 2px 2px 0 rgba(255,255,255,.5),
+   7px 7px 20px 0 rgba(0,0,0,.1),
+   4px 4px 5px 0 rgba(0,0,0,.1);
+  outline: none;
+}
+.form-control {
+    font-size: 12px;
+    padding: 5px;/* 원하는 크기로 조절 */
+}
+#image-list {
+    list-style: none; /* 리스트 스타일 제거 */
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+.col-md-1, .col-md-2, .col-md-3, .col-md-6{
+    padding-left: 5px;
+    padding-right: 5px;
+}
+
+/* 1 */
+.btn-1 {
+  background: rgb(6,14,131);
+  background: linear-gradient(0deg, rgba(6,14,131,1) 0%, rgba(12,25,180,1) 100%);
+  border: none;
+}
+.btn-1:hover {
+   background: rgb(0,3,255);
+background: linear-gradient(0deg, rgba(0,3,255,1) 0%, rgba(2,126,251,1) 100%);
+}
+.text-danger {
+        white-space: normal; /* 에러 메시지가 여러 줄로 나뉘도록 설정 */
+    }
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
+</style>
+</head>
+<body style="overflow:auto; margin:0; padding:0;">
+<div class="container-wrapper">
+<div class="container-fluid">
+    <div class="table-wrapper table-sm">
+<form method="post" id="input-form" autocomplete="off">
+  {% csrf_token %}
+  {{ formset.management_form }}
+  <div class="table-wrapper2">
+  <table id="response" class="table table-bordered" style="white-space: nowrap;
+    max-height: 600px; min-width:1200px; overflow: auto;">
+    <thead>
+      <tr>
+        <th style="width:4%;" data-toggle="tooltip" data-placement="bottom" title="Hooray!" data-delay="10">카드</th>
+        <th style="width:3%;">N</th>
+        <th style="width:3.5%;">시간</th>
+        <th style="width:13%;">반응</th>
+        <th style="width:25%;">질문</th>
+        <th style="width:2%;">회전</th>
+        <th style="width:3%;">반응영역</th>
+        <th style="width:3%;">발달질</th>
+        <th style="width:2%;">영역번호</th>
+        <th style="width:7%;">결정인</th>
+        <th style="width:3%;">형태질</th>
+        <th style="width:3%;">(2)</th>
+        <th style="width:7%;">내용인</th>
+        <th style="width:3%;">P</th>
+        <th style="width:4%;">Z</th>
+        <th style="width:7%;">특수점수</th>
+        <th style="width:7%;">코멘트</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% load widget_tweaks %}
+      {% for form in formset %}
+        <tr>
+          {% for field in form %}
+          <td>
+            {% render_field field class="form-control" %}
+            {% for error in field.errors %}
+              <span class="text-danger">{{ error }}</span>
+            {% endfor %}
+          </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+  </table>
+    </div>
+      <input type="hidden" value="false" name="additems" id="additems">
+    <input type="hidden" value="false" name="tempsave" id="tempsave">
+    <div class="d-flex justify-content-end" style="margin-top: 10px;">
+    <button class="btn btn-primary mx-2" id="additemsbutton" onclick="addItems()">행 추가</button>
+        <button class="btn btn-primary mx-2" id="tempsavebutton" onclick="tempSave()">임시저장</button>
+    <input type="submit" class="btn btn-primary mx-2" value="저장하기">
+  </div>
+</form>
+</div>
+  <div class="row">
+  <div class="col-md-6" style="margin-bottom:0">
+  {% load widget_tweaks %}
+  <form hx-get="/search_results" hx-target = "#search-results" autocomplete="off">
+        <div class="d-flex flex-row" style="margin-bottom:0">
+        <div class="form-group col-md-1">
+          {{ filter.form.Card.label_tag }}
+          {% render_field filter.form.Card class="form-control" %}
+        </div>
+        <div class="form-group col-md-1">
+          {{ filter.form.LOC.label_tag }}
+          {% render_field filter.form.LOC class="form-control" %}
+        </div>
+        <div class="form-group col-md-1">
+          {{ filter.form.Cont.label_tag }}
+          {% render_field filter.form.Cont class="form-control" %}
+        </div>
+        <div class="form-group col-md-1">
+          {{ filter.form.FQ.label_tag }}
+          {% render_field filter.form.FQ class="form-control" %}
+        </div>
+          <div class="form-group col-md-3">
+          {{ filter.form.Determinants.label_tag }}
+          {% render_field filter.form.Determinants class="form-control" %}
+        </div>
+          <div class="form-group col-md-2">
+          {{ filter.form.Item.label_tag }}
+          {% render_field filter.form.Item class="form-control" %}
+        </div>
+          <div class="form-group col-md-1">
+          &lt;{{ filter.form.V.label_tag }}
+          {% render_field filter.form.V class="form-control" %}
+        </div>
+        <button type="submit" class="custom-btn btn-1" style="margin-top:28px; margin-left:10px">
+        <span class="glyphicon glyphicon-search"></span> 검색
+      </button>
+        </div>
+        </form></div>
+    <div class="col-md-6" style="margin-bottom: 0; margin-top:20px">
+    </div>
+    </div>
+  </div>
+ <div id="search-results" class="container-fluid" style="margin-top:0">
+        <hr style="border-top:1px dotted #ccc; margin-top: 0; margin-bottom: 10px;"/>
+        {% block content %}
+
+        {% endblock %}
+ </div>
+</div>
+<script>
+// const DEFAULT_HEIGHT = 30; // textarea 기본 height
+
+//const $textarea = document.querySelector('#textarea');
+// Textarea 자동 높이 조절
+//$textarea.oninput = (event) => {
+  //const $target = event.target;
+
+  //$target.style.height = 0;
+  //$target.style.height = DEFAULT_HEIGHT + $target.scrollHeight + 'px';
+//};
+
+// Textarea 자동 높이 조절
+// function adjustTextareaHeight($textarea) {
+//   $textarea.style.height = 0;
+//   $textarea.style.height = DEFAULT_HEIGHT + $textarea.scrollHeight + 'px';
+// }
+//
+// document.addEventListener('input', (event) => {
+//   const $target = event.target;
+//
+//   if ($target.classList.contains('textarea')) {
+//     adjustTextareaHeight($target);
+//   }
+// });
+function addItems() {
+  // additems element의 값을 "true"로 변경
+  document.getElementById('additems').value = 'true';
+}
+function tempSave() {
+  // tempSave element의 값을 "true"로 변경
+  document.getElementById('tempsave').value = 'true';
+}
+autosize(document.querySelectorAll('textarea'));
+$(document).ready(function(){
+  $('[data-toggle="tooltip"]').tooltip();
+});
+</script>
+</body>
+</html>
