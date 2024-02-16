@@ -6,6 +6,10 @@
     <p style="text-align: left; font-weight: bold;">작성자: {{ post.author.username }} | 작성일: {{ post.created_at }}</p>
     <p style="text-align: left;">{{ post.content }}</p>
 
+    {% if post.file %}
+    <p style="text-align: left;"><a href="{{ post.file.url }}" download>{{ post.file.name }}</a></p>
+    {% endif %}
+
       {% if can_delete %}
     <form method="post" action="{% url 'board:delete_post' post.id %}" style="display: inline;">
       {% csrf_token %}
