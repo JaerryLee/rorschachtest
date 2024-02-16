@@ -74,7 +74,7 @@ def intermediate_board(request):
 @login_required
 def post_detail(request, post_id):
     post = get_object_or_404(Post, id=post_id)
-    if request.user.group is not 'intermediate' and post.group is 'intermediate':
+    if request.user.group != 'intermediate' and post.group == 'intermediate':
         return HttpResponseForbidden("중급 이상 이수자만 접속 가능한 페이지입니다.")
     comments = Comment.objects.filter(post=post)
 
