@@ -218,16 +218,14 @@ def export_structural_summary_xlsx(request, client_id):
 
         # 1부터 10까지의 숫자가 적어도 한 번씩 나왔는지 검사
         numbers_found = set()
+        roman_dict = {
+            'I': '1', 'II': '2', 'III': '3', 'IV': '4', 'V': '5',
+            'VI': '6', 'VII': '7', 'VIII': '8', 'IX': '9', 'X': '10'
+        }
         for response_code in response_codes:
             card_value = response_code.card
-            if isinstance(card_value, int):
-                numbers_found.add(card_value)
-            elif isinstance(card_value, str):
-                # 로마 숫자를 아라비아 숫자로 변환
-                roman_numerals = {'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
-                                  'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10}
-                if card_value in roman_numerals:
-                    numbers_found.add(roman_numerals[card_value])
+            card_val = roman_dict.get(card_value, card_value)
+            numbers_found.add(card_val)
 
         # 1부터 10까지의 숫자가 모두 나왔는지 확인
         if len(numbers_found) < 10:
