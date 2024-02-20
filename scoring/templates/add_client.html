@@ -68,14 +68,17 @@
                 </div>
             </div>
             <p style="font-size:12px">*입력해주신 정보를 바탕으로 검사 당시 연령을 계산합니다.<br>
-                연령 규준을 참고하여 결과를 산출하니 특히 아동의 경우 정확히 입력해주세요.</p>
+                연령 규준을 참고하여 결과를 산출하니 특히 아동의 경우 정확히 입력해주세요.<br>
+            </p>
             <div class="form-group">
                 <label>생년월일</label>
                 {{ form.birthdate }}
+                <small class="form-text text-muted">{{ form.birthdate.help_text }}</small>
             </div>
             <div class="form-group">
                 <label>검사일</label>
                 {{ form.testDate }}
+                <small class="form-text text-muted">{{ form.testDate.help_text }}</small>
             </div>
             <div class="form-group">
                 <label>비고</label>
