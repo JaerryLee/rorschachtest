@@ -177,13 +177,11 @@ def add_client(request):
             print(form.errors)
     else:
         form = ClientForm(initial={
-            'username': request.GET.get('username', ''),
-            'email': request.GET.get('email', ''),
-            'first_name': request.GET.get('first_name', ''),
-            'last_name': request.GET.get('last_name', ''),
-            'phone': request.GET.get('phone', ''),
-            'password1': request.GET.get('password1', ''),
-            'password2': request.GET.get('password2', '')
+            'name': request.GET.get('name', ''),
+            'gender': request.GET.get('gender', ''),
+            'birthdate': request.GET.get('birthdate', ''),
+            'testDate': request.GET.get('testDate', ''),
+            'notes': request.GET.get('notes', ''),
         })
     return render(request, 'add_client.html', {'form': form})
 
