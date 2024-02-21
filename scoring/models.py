@@ -450,33 +450,36 @@ class StructuralSummary(models.Model):
             contents_lower = [item.lower() for item in contents]
             contents_list.extend(contents_lower)
             # 7. 특수점수
-            specials = re.split(r'[.,]+', response_code.special.replace(' ', ''))
-            specials = ' '.join(specials).split()
-            specials = [value for value in specials if value not in ["GHR", "PHR"]]
-            if (any(content in contents_lower for content in ['h', '(h)', 'hd', '(hd)', 'hx'])
-                    or any(determinant in determinants for determinant in ['Ma', 'Mp', 'Ma-p'])
-                    or (any(determinant in determinants for determinant in ['fma', 'fmp', 'fma-p'])
-                        and any(special in specials for special in ['COP', 'AG']))):
-                if ("h" in contents_lower and response_code.form_qual in ["+", "o", "u"]
-                        and all(special not in specials for special in
-                                ['DV2', 'DR', 'DR2', 'INC', 'INC2', 'FAB', 'FAB2', 'CON', 'ALOG', 'AG', 'MOR'])):
-                    specials.append("GHR")
-                elif response_code.form_qual in ["-", "no"] or any(
-                        special in specials for special in ['DV2', 'DR2', 'INC2', 'FAB2', 'CON', 'ALOG']):
-                    specials.append("PHR")
-                elif "COP" in specials and "AG" not in specials:
-                    specials.append("GHR")
-                elif "FAB" in specials or "MOR" in specials or "an" in contents_lower:
-                    specials.append("PHR")
-                elif response_code.popular == "P" and response_code.card in ['3', '4', '7', '9']:
-                    specials.append("GHR")
-                elif any(special in specials for special in ['AG', 'INC', 'DR']):
-                    specials.append("PHR")
-                else:
-                    specials.append("GHR")
-            special_list.extend(specials)
-            response_code.special = ','.join(specials)
-            response_code.save()
+            if response_code.special is not None:
+                specials = re.split(r'[.,]+', response_code.special.replace(' ', ''))
+                specials = ' '.join(specials).split()
+                specials = [value for value in specials if value not in ["GHR", "PHR"]]
+                if (any(content in contents_lower for content in ['h', '(h)', 'hd', '(hd)', 'hx'])
+                        or any(determinant in determinants for determinant in ['Ma', 'Mp', 'Ma-p'])
+                        or (any(determinant in determinants for determinant in ['fma', 'fmp', 'fma-p'])
+                            and any(special in specials for special in ['COP', 'AG']))):
+                    if ("h" in contents_lower and response_code.form_qual in ["+", "o", "u"]
+                            and all(special not in specials for special in
+                                    ['DV2', 'DR', 'DR2', 'INC', 'INC2', 'FAB', 'FAB2', 'CON', 'ALOG', 'AG', 'MOR'])):
+                        specials.append("GHR")
+                    elif response_code.form_qual in ["-", "no"] or any(
+                            special in specials for special in ['DV2', 'DR2', 'INC2', 'FAB2', 'CON', 'ALOG']):
+                        specials.append("PHR")
+                    elif "COP" in specials and "AG" not in specials:
+                        specials.append("GHR")
+                    elif "FAB" in specials or "MOR" in specials or "an" in contents_lower:
+                        specials.append("PHR")
+                    elif response_code.popular == "P" and response_code.card in ['3', '4', '7', '9']:
+                        specials.append("GHR")
+                    elif any(special in specials for special in ['AG', 'INC', 'DR']):
+                        specials.append("PHR")
+                    else:
+                        specials.append("GHR")
+                special_list.extend(specials)
+                response_code.special = ','.join(specials)
+                response_code.save()
+            else:
+                pass
 
         # 4-1. 혼합 결정인
         self.blends = blends
