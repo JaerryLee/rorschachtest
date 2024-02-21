@@ -50,7 +50,7 @@ def validate_special(value):
 
     for element in elements:
         if element not in ['DV', 'DV2', 'DR', 'DR2', 'INC', 'INC2', 'FAB', 'FAB2', 'CON', 'ALOG', 'PSV',
-                           'AB', 'AG', 'COP', 'MOR', 'PER', 'CP']:
+                           'AB', 'AG', 'COP', 'MOR', 'PER', 'CP', 'GHR', 'PHR']:
             raise ValidationError(
                 "기호 오류"
             )

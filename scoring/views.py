@@ -241,7 +241,9 @@ def export_structural_summary_xlsx(request, client_id):
     except Exception as e:
         # 기타 예외 처리
         logging.error(f"예기치 못한 오류 발생: {e}")
-        return HttpResponse("예기치 못한 오류가 발생했습니다.")
+        error_message = f"예기치 못한 오류 발생: {type(e).__name__}, {str(e)}"
+        return JsonResponse({'error': error_message}, status=500)
+        #return HttpResponse("예기치 못한 오류가 발생했습니다.")
 
     # 새로운 워크북 및 worksheet 생성
     wb = Workbook()
