@@ -330,8 +330,9 @@ class StructuralSummary(models.Model):
         contents_list = []
         blends = ''
         special_list = []
-        elements_to_check = ['fy', 'yf', 'y', 'ft', 'tf', 't', 'fv', 'vf', 'v']  # shd elements
+        elements_to_check = ['fy', 'yf', 'y', 'ft', 'tf', 't', 'fv', 'vf', 'v', "c'f", "fc'", "c'"]  # shd elements
         col_shd_blends = 0
+        shd_blends = 0
 
         # 1. Location Features
         zf = response_codes.filter(Q(Z='ZD') | Q(Z='ZW') | Q(Z='ZS') | Q(Z='ZA')).count()
@@ -440,6 +441,8 @@ class StructuralSummary(models.Model):
                 if (any(element in determinants_lower for element in elements_to_check)
                         and any(element in determinants_lower for element in ['c', 'cf', 'fc'])):
                     col_shd_blends += 1
+                if len(set(elements_to_check) & set(determinants_lower)) >= 2:
+                    shd_blends += 1
             else:
                 determinants_list.extend(determinants_lower)  # single list
             # 쌍반응
@@ -740,7 +743,7 @@ class StructuralSummary(models.Model):
         PTI5 = "o" if self.mq_minus > 1 or self.x_minus_per > 0.40 else "x"
         self.PTI = PTI1 + PTI2 + PTI3 + PTI4 + PTI5
         self.sumPTI = self.PTI.count("o")
-        DEPI1 = "o" if self.sum_V > 0 or self.Fd_l > 2 else "x"
+        DEPI1 = "o" if self.sum_V > 0 or self.fdn > 2 else "x"
         DEPI2 = "o" if col_shd_blends > 0 or self.S > 2 else "x"
         DEPI3 = "o" if (self.ego > high_ego_crt and self.fr_rf == 0) or (self.ego < low_ego_crt) else "x"
         DEPI4 = "o" if self.afr < afr_crt or blends_num < 4 else "x"
@@ -756,13 +759,13 @@ class StructuralSummary(models.Model):
         CDI5 = "o" if self.sum_T > 1 or self.Isol > 0.24 or self.Fd_l > 0 else "x"
         self.CDI = CDI1 + CDI2 + CDI3 + CDI4 + CDI5
         self.sumCDI = self.CDI.count("o")  # 4이상
-        SCON1 = "o" if self.sum_V + self.Fd_l > 2 else "x"
+        SCON1 = "o" if self.sum_V + self.fdn > 2 else "x"
         SCON2 = "o" if col_shd_blends > 0 else "x"
         SCON3 = "o" if self.ego < 0.31 or self.ego > 0.44 else "x"
         SCON4 = "o" if self.sp_mor > 3 else "x"
         SCON5 = "o" if self.Zd > 3.5 or self.Zd < -3.5 else "x"
         SCON6 = "o" if self.es > self.EA else "x"
-        SCON7 = "o" if self.CF + self.C > self.FC else "x"
+        SCON7 = "o" if sum_cf + sum_c > sum_fc else "x"
         SCON8 = "o" if self.x_plus_per < 0.70 else "x"
         SCON9 = "o" if self.S > 3 else "x"
         SCON10 = "o" if self.popular < 3 or self.popular > 8 else "x"
