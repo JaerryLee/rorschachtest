@@ -531,12 +531,6 @@ def export_structural_summary_xlsx(request, client_id):
 
     # 데이터 추가
     # 1. location features
-    from openpyxl.styles import NamedStyle
-    number_format_style = NamedStyle(number_format='0.0')
-
-    ws['B6'].number_format = number_format_style
-    ws['B7'].number_format = number_format_style
-
     ws['B5'] = structural_summary.Zf
     ws['B6'] = structural_summary.Zsum
     ws['B7'] = structural_summary.Zest
