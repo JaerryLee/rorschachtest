@@ -577,6 +577,7 @@ def export_structural_summary_xlsx(request, client_id):
     for field_name in real_field:
         field_value = getattr(structural_summary, field_name)
         ws.cell(row=row, column=8, value=field_value)
+        ws.cell(row=row, column=8, value=field_value).number_format = ";;#;"
         row += 1
 
     # 5. Contents
@@ -584,7 +585,7 @@ def export_structural_summary_xlsx(request, client_id):
     for field_name in cont_real_fields:
         field_value = getattr(structural_summary, field_name)
         ws.cell(row=row, column=11, value=field_value)
-        ws.cell(row=row, column=11, value=field_value).number_format = ";;0;"
+        ws.cell(row=row, column=11, value=field_value).number_format = ";;#;"
         row += 1
 
     # 6. approach
@@ -690,7 +691,7 @@ def export_structural_summary_xlsx(request, client_id):
     for field_name in med_real_fields:
         field_value = getattr(structural_summary, field_name)
         wsd.cell(row=row, column=7, value=field_value)
-        wsd.cell(row=row, column=7).number_format = "0.##;-0.##;0"
+        wsd.cell(row=row, column=7).number_format = "0.##;-0.##;#;"
         row += 1
 
     # 13. Processing
