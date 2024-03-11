@@ -495,7 +495,7 @@ def export_structural_summary_xlsx(request, client_id):
         'XA%', 'WDA%', 'X-%', 'S-', 'P', 'X+%', 'Xu%'
     ]
     med_real_fields = [
-        'x_minus_per', 'xa_per', 'wda_per', 's_minus', 'popular',
+        'xa_per', 'wda_per', 'x_minus_per', 's_minus', 'popular',
         'x_plus_per', 'xu_per'
     ]
     s_row = 15
@@ -535,7 +535,7 @@ def export_structural_summary_xlsx(request, client_id):
     ws['B6'] = structural_summary.Zsum
     ws['B6'].number_format = '0.0'
     ws['B7'] = structural_summary.Zest
-    ws['B6'].number_format = '0.0'
+    ws['B7'].number_format = '0.0'
     ws['B9'] = structural_summary.W
     ws['B10'] = structural_summary.D
     ws['B11'] = structural_summary.Dd
@@ -688,6 +688,7 @@ def export_structural_summary_xlsx(request, client_id):
     for field_name in med_real_fields:
         field_value = getattr(structural_summary, field_name)
         wsd.cell(row=row, column=7, value=field_value)
+        wsd.cell(row=row, column=7).number_format = "0.##"
         row += 1
 
     # 13. Processing
