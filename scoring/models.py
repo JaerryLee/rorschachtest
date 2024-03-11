@@ -457,8 +457,8 @@ class StructuralSummary(models.Model):
             else:
                 specials = []
             if (any(content in contents_lower for content in ['h', '(h)', 'hd', '(hd)', 'hx'])
-                    or any(determinant in determinants for determinant in ['Ma', 'Mp', 'Ma-p'])
-                    or (any(determinant in determinants for determinant in ['fma', 'fmp', 'fma-p'])
+                    or any(determinant in determinants_lower for determinant in ['Ma', 'Mp', 'Ma-p'])
+                    or (any(determinant in determinants_lower for determinant in ['fma', 'fmp', 'fma-p'])
                         and any(special in specials for special in ['COP', 'AG']))):
                 if ("h" in contents_lower and response_code.form_qual in ["+", "o", "u"]
                         and all(special not in specials for special in
