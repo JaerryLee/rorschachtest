@@ -691,7 +691,11 @@ def export_structural_summary_xlsx(request, client_id):
     for field_name in med_real_fields:
         field_value = getattr(structural_summary, field_name)
         wsd.cell(row=row, column=7, value=field_value)
-        wsd.cell(row=row, column=7).number_format = "0.##;-0.##;#;"
+        if isinstance(field_value, int):
+            number_format = "0"
+        else:
+            number_format = "0.00"
+        wsd.cell(row=row, column=7).number_format = number_format
         row += 1
 
     # 13. Processing
