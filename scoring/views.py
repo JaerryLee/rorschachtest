@@ -533,7 +533,9 @@ def export_structural_summary_xlsx(request, client_id):
     # 1. location features
     ws['B5'] = structural_summary.Zf
     ws['B6'] = structural_summary.Zsum
+    ws['B6'].number_format = '0.0'
     ws['B7'] = structural_summary.Zest
+    ws['B6'].number_format = '0.0'
     ws['B9'] = structural_summary.W
     ws['B10'] = structural_summary.D
     ws['B11'] = structural_summary.Dd
