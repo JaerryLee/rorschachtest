@@ -450,9 +450,12 @@ class StructuralSummary(models.Model):
             contents_lower = [item.lower() for item in contents]
             contents_list.extend(contents_lower)
             # 7. 특수점수
-            specials = re.split(r'[.,]+', response_code.special.replace(' ', ''))
-            specials = ' '.join(specials).split()
-            specials = [value for value in specials if value not in ["GHR", "PHR"]]
+            if response_code.special is not None:
+                specials = re.split(r'[.,]+', response_code.special.replace(' ', ''))
+                specials = ' '.join(specials).split()
+                specials = [value for value in specials if value not in ["GHR", "PHR"]]
+            else:
+                specials = []
             if (any(content in contents_lower for content in ['h', '(h)', 'hd', '(hd)', 'hx'])
                     or any(determinant in determinants for determinant in ['Ma', 'Mp', 'Ma-p'])
                     or (any(determinant in determinants for determinant in ['fma', 'fmp', 'fma-p'])
