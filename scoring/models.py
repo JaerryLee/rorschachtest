@@ -418,7 +418,7 @@ class StructuralSummary(models.Model):
         self.mq_minus = mqual_counts['-']
         self.mq_none = mqual_counts['none']
         # 3-3. W+D
-        wd_list = response_codes.filter(Q(location__contains='W') | Q(location__contains='D'))
+        wd_list = response_codes.filter(Q(location__contains='W') | Q(location__exact='D') | Q(location__contains='Ds'))
         wd_counts = Counter(wd.form_qual for wd in wd_list if wd.form_qual)
         self.wd_plus = wd_counts['+']
         self.wd_o = wd_counts['o']
@@ -434,7 +434,7 @@ class StructuralSummary(models.Model):
             determinants_lower = [item.lower() if item not in ['ma', 'mp', 'Ma', 'Mp', 'Ma-p']
                                   else item for item in determinants]
             all_d_list.extend(determinants_lower)
-            # Check if response_code.determinants has 2 or more elements
+            # 혼합반응
             if len(determinants) >= 2:
                 blends += '.'.join(determinants) + ','
                 if (any(element in determinants_lower for element in elements_to_check)
@@ -442,7 +442,7 @@ class StructuralSummary(models.Model):
                     col_shd_blends += 1
             else:
                 determinants_list.extend(determinants_lower)  # single list
-            # Add response_code.pair if it exists
+            # 쌍반응
             if response_code.pair:
                 determinants_list.append(response_code.pair)
             # 내용
@@ -450,36 +450,33 @@ class StructuralSummary(models.Model):
             contents_lower = [item.lower() for item in contents]
             contents_list.extend(contents_lower)
             # 7. 특수점수
-            if response_code.special is not None:
-                specials = re.split(r'[.,]+', response_code.special.replace(' ', ''))
-                specials = ' '.join(specials).split()
-                specials = [value for value in specials if value not in ["GHR", "PHR"]]
-                if (any(content in contents_lower for content in ['h', '(h)', 'hd', '(hd)', 'hx'])
-                        or any(determinant in determinants for determinant in ['Ma', 'Mp', 'Ma-p'])
-                        or (any(determinant in determinants for determinant in ['fma', 'fmp', 'fma-p'])
-                            and any(special in specials for special in ['COP', 'AG']))):
-                    if ("h" in contents_lower and response_code.form_qual in ["+", "o", "u"]
-                            and all(special not in specials for special in
-                                    ['DV2', 'DR', 'DR2', 'INC', 'INC2', 'FAB', 'FAB2', 'CON', 'ALOG', 'AG', 'MOR'])):
-                        specials.append("GHR")
-                    elif response_code.form_qual in ["-", "no"] or any(
-                            special in specials for special in ['DV2', 'DR2', 'INC2', 'FAB2', 'CON', 'ALOG']):
-                        specials.append("PHR")
-                    elif "COP" in specials and "AG" not in specials:
-                        specials.append("GHR")
-                    elif "FAB" in specials or "MOR" in specials or "an" in contents_lower:
-                        specials.append("PHR")
-                    elif response_code.popular == "P" and response_code.card in ['3', '4', '7', '9']:
-                        specials.append("GHR")
-                    elif any(special in specials for special in ['AG', 'INC', 'DR']):
-                        specials.append("PHR")
-                    else:
-                        specials.append("GHR")
-                special_list.extend(specials)
-                response_code.special = ','.join(specials)
-                response_code.save()
-            else:
-                pass
+            specials = re.split(r'[.,]+', response_code.special.replace(' ', ''))
+            specials = ' '.join(specials).split()
+            specials = [value for value in specials if value not in ["GHR", "PHR"]]
+            if (any(content in contents_lower for content in ['h', '(h)', 'hd', '(hd)', 'hx'])
+                    or any(determinant in determinants for determinant in ['Ma', 'Mp', 'Ma-p'])
+                    or (any(determinant in determinants for determinant in ['fma', 'fmp', 'fma-p'])
+                        and any(special in specials for special in ['COP', 'AG']))):
+                if ("h" in contents_lower and response_code.form_qual in ["+", "o", "u"]
+                        and all(special not in specials for special in
+                                ['DV2', 'DR', 'DR2', 'INC', 'INC2', 'FAB', 'FAB2', 'CON', 'ALOG', 'AG', 'MOR'])):
+                    specials.append("GHR")
+                elif response_code.form_qual in ["-", "no"] or any(
+                        special in specials for special in ['DV2', 'DR2', 'INC2', 'FAB2', 'CON', 'ALOG']):
+                    specials.append("PHR")
+                elif "COP" in specials and "AG" not in specials:
+                    specials.append("GHR")
+                elif "FAB" in specials or "MOR" in specials or "an" in contents_lower:
+                    specials.append("PHR")
+                elif response_code.popular == "P" and response_code.card in ['3', '4', '7', '9']:
+                    specials.append("GHR")
+                elif any(special in specials for special in ['AG', 'INC', 'DR']):
+                    specials.append("PHR")
+                else:
+                    specials.append("GHR")
+            special_list.extend(specials)
+            response_code.special = ','.join(specials)
+            response_code.save()
 
         # 4-1. 혼합 결정인
         self.blends = blends
@@ -629,6 +626,7 @@ class StructuralSummary(models.Model):
             self.afr = afr_count_numerator / afr_count_denominator
         else:
             self.afr = 1  # 불가능한 값
+        blends = blends.rstrip(',')  # blends_num 계산 시 맨 오른쪽 쉼표 제거
         blends_num = len(blends.split(','))
         self.blends_r = "{}:{}".format(blends_num, self.R)
 
