@@ -410,7 +410,7 @@ class StructuralSummary(models.Model):
         self.fqx_minus = form_qual_counts['-']
         self.fqx_none = form_qual_counts['none']
         # 3-2. Mqual
-        mqual_list = response_codes.filter(determinants__contains='M')
+        mqual_list = response_codes.filter(determinants__regex=r'(?<!F)M')
         mqual_counts = Counter([mqual.form_qual for mqual in mqual_list if mqual.form_qual])
         self.mq_plus = mqual_counts['+']
         self.mq_o = mqual_counts['o']
