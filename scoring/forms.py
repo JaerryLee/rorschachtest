@@ -107,7 +107,7 @@ def validate_pair(value):
 class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
-        fields = ['name', 'gender', 'birthdate', 'testDate', 'notes']
+        fields = ['name', 'gender', 'birthdate', 'testDate', 'notes', 'consent']
 
     name = forms.CharField(widget=forms.TextInput(attrs={'class': 'form-control'}))
     gender = forms.ChoiceField(choices=[('M', '남성'), ('F', '여성'), ('O', '기타')],
@@ -115,6 +115,7 @@ class ClientForm(forms.ModelForm):
     birthdate = forms.DateField(widget=forms.DateInput(attrs={'class': 'form-control'}))
     testDate = forms.DateField(widget=forms.DateInput(attrs={'class': 'form-control'}))
     notes = forms.CharField(widget=forms.Textarea(attrs={'class': 'form-control'}), required=False)
+    consent = forms.BooleanField(required=True, widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}))
 
     def clean(self):
         cleaned_data = super().clean()

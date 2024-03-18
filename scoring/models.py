@@ -64,6 +64,7 @@ class Client(models.Model):
     testDate = models.DateField(verbose_name='검사일', help_text="YYYY-DD-MM 형식으로 입력(예: 2023-05-01)")
     notes = models.TextField(blank=True, verbose_name='비고')
     age = models.IntegerField(verbose_name="검사 당시 나이", blank=True, null=True)
+    consent = models.BooleanField(default=False)
 
     # assesor = models.ForeignKey("User", related_name="user", on_delete=models.CASCADE, db_column="username")
     def calculate_age(self):

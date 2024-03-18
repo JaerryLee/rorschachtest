@@ -57,6 +57,15 @@
         <br>
         <form method="post">
             {% csrf_token %}
+            <div class="form-group">
+                <label style="display: inline-block;" for="id_consent">데이터 연구활용 동의</label>
+                <div style="display: inline-block; margin-left: 25px; vertical-align: top;">
+                    {{ form.consent }}
+                </div>
+                <p style="font-size:12px">*입력해주신 정보는 익명처리 되어 연구에 사용됩니다.<br>
+                    수검자에게 해당 사실에 대한 동의를 받은 후 이용해주세요.<br>
+                </p>
+            </div>
             <div class="form-row">
                 <div class="form-group col-md-6">
                     <label>이름</label>

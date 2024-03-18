@@ -182,6 +182,7 @@ def add_client(request):
             'birthdate': request.GET.get('birthdate', ''),
             'testDate': request.GET.get('testDate', ''),
             'notes': request.GET.get('notes', ''),
+            'consent': request.GET.get('consent', '')
         })
     return render(request, 'add_client.html', {'form': form})
 
