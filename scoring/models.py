@@ -477,7 +477,7 @@ class StructuralSummary(models.Model):
                     specials.append("PHR")
                 elif response_code.popular == "P" and response_code.card in ['3', '4', '7', '9']:
                     specials.append("GHR")
-                elif any(special in specials for special in ['AG', 'INC', 'DR']):
+                elif any(special in specials for special in ['AG', 'INC', 'DR']) or "hd" in contents_lower:
                     specials.append("PHR")
                 else:
                     specials.append("GHR")
