@@ -420,7 +420,7 @@ class StructuralSummary(models.Model):
         self.mq_minus = mqual_counts['-']
         self.mq_none = mqual_counts['none']
         # 3-3. W+D
-        wd_list = response_codes.filter(Q(location__contains='W') | Q(location__exact='D') | Q(location__contains='Ds'))
+        wd_list = response_codes.filter(location__regex=r'\b(W|D|Ds|WS)\b')
         wd_counts = Counter(wd.form_qual for wd in wd_list if wd.form_qual)
         self.wd_plus = wd_counts['+']
         self.wd_o = wd_counts['o']
