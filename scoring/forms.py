@@ -157,7 +157,11 @@ class ResponseCodeForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        cleaned_data = {k: v for k, v in cleaned_data.items() if v}
+        original_data = self.data.dict()
+        for key, value in original_data.items():
+            if not value:
+                cleaned_data[key] = value
+
         loc_value = cleaned_data.get('location', '')
         Z_value = cleaned_data.get('Z', '')
         dq_value = cleaned_data.get('dev_qual', '')
