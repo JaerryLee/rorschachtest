@@ -1,4 +1,3 @@
-# views.py
 from .models import Post, Comment, Notice
 from functools import wraps
 from django.http import HttpResponseForbidden
@@ -7,21 +6,21 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.contrib.auth.decorators import login_required
 from .forms import PostForm, CommentForm
 
+GROUP_LEVEL = {'beginner': 1, 'intermediate': 2, 'advanced': 3}
+GROUP_LABEL = {'beginner': '초급', 'intermediate': '중급', 'advanced': '고급'}
 
-def group_required(group_name):
+def group_min_required(min_group_name):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(request, *args, **kwargs):
             if not request.user.is_authenticated:
                 return login_required(view_func)(request, *args, **kwargs)
-
-            if request.user.group == group_name:
+            user_level = GROUP_LEVEL.get(getattr(request.user, 'group', None), 0)
+            required_level = GROUP_LEVEL[min_group_name]
+            if user_level >= required_level:
                 return view_func(request, *args, **kwargs)
-            else:
-                return HttpResponseForbidden("중급 이상 이수자만 접속 가능한 페이지입니다.")
-
+            return HttpResponseForbidden(f"{GROUP_LABEL[min_group_name]} 이상 이수자만 접속 가능한 페이지입니다.")
         return _wrapped_view
-
     return decorator
 
 
@@ -48,7 +47,7 @@ def beginner_board(request):
     return render(request, 'beginner_board.html', {'posts': posts, 'search_query': search_query})
 
 
-@group_required('intermediate')
+@group_min_required('intermediate')
 def intermediate_board(request):
     # Retrieve all posts
     posts = Post.objects.filter(group='intermediate').order_by('-created_at')
@@ -71,11 +70,36 @@ def intermediate_board(request):
     return render(request, 'intermediate_board.html', {'posts': posts, 'search_query': search_query})
 
 
+@group_min_required('advanced')
+def advanced_board(request):
+    posts = Post.objects.filter(group='advanced').order_by('-created_at')
+
+    search_query = request.GET.get('search', '')
+    if search_query:
+        posts = posts.filter(title__icontains=search_query)
+
+    paginator = Paginator(posts, 10)
+    page = request.GET.get('page')
+    try:
+        posts = paginator.page(page)
+    except PageNotAnInteger:
+        posts = paginator.page(1)
+    except EmptyPage:
+        posts = paginator.page(paginator.num_pages)
+
+    return render(request, 'advanced_board.html', {'posts': posts, 'search_query': search_query})
+
+
 @login_required
 def post_detail(request, post_id):
     post = get_object_or_404(Post, id=post_id)
-    if request.user.group != 'intermediate' and post.group == 'intermediate':
-        return HttpResponseForbidden("중급 이상 이수자만 접속 가능한 페이지입니다.")
+
+    if post.group in GROUP_LEVEL:
+        user_level = GROUP_LEVEL.get(getattr(request.user, 'group', None), 0)
+        required_level = GROUP_LEVEL[post.group]
+        if user_level < required_level:
+            return HttpResponseForbidden(f"{GROUP_LABEL[post.group]} 이상 이수자만 접속 가능한 페이지입니다.")
+
     comments = Comment.objects.filter(post=post)
 
     can_delete = False
@@ -87,14 +111,15 @@ def post_detail(request, post_id):
         if form.is_valid():
             comment = form.save(commit=False)
             comment.post = post
-            comment.author = request.user  # Assuming you have user authentication
+            comment.author = request.user
             comment.save()
             return redirect('board:post_detail', post_id=post_id)
     else:
         form = CommentForm()
 
-    return render(request, 'post_detail.html', {'post': post, 'comments': comments, 'form': form,
-                                                'can_delete': can_delete})
+    return render(request, 'post_detail.html', {
+        'post': post, 'comments': comments, 'form': form, 'can_delete': can_delete
+    })
 
 
 @login_required
@@ -106,7 +131,11 @@ def create_post(request, group):
             new_post.author = request.user
             new_post.group = group
             new_post.save()
-            return redirect('board:beginner_board' if group == 'beginner' else 'board:intermediate_board')
+            return redirect(
+                'board:beginner_board' if group == 'beginner'
+                else 'board:intermediate_board' if group == 'intermediate'
+                else 'board:advanced_board'
+            )
     else:
         form = PostForm()
 
@@ -121,7 +150,11 @@ def delete_post(request, post_id):
     if request.user == post.author:
         post.delete()
 
-    return redirect('board:beginner_board' if group == 'beginner' else 'board:intermediate_board')
+    return redirect(
+        'board:beginner_board' if group == 'beginner'
+        else 'board:intermediate_board' if group == 'intermediate'
+        else 'board:advanced_board'
+    )
 
 
 def notice(request):

@@ -57,7 +57,6 @@
         <br>
         <form method="post">
             {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.GET.next|default:'intermediate' }}">
             <div class="form-group">
                 <label style="display: inline-block;" for="id_consent">데이터 연구활용 동의</label>
                 <div style="display: inline-block; margin-left: 25px; vertical-align: top;">
@@ -83,12 +82,12 @@
             <div class="form-group">
                 <label>생년월일</label>
                 {{ form.birthdate }}
-                <small class="form-text text-muted">YYYY-MM-DD 형식으로 입력(예: 2000-08-01)</small>
+                <small class="form-text text-muted">YYYY-DD-MM 형식으로 입력(예: 2000-08-01)</small>
             </div>
             <div class="form-group">
                 <label>검사일</label>
                 {{ form.testDate }}
-                <small class="form-text text-muted">YYYY-MM-DD 형식으로 입력(예: 2023-05-01)</small>
+                <small class="form-text text-muted">YYYY-DD-MM 형식으로 입력(예: 2023-05-01)</small>
             </div>
             <div class="form-group">
                 <label>비고</label>

@@ -1,0 +1,42 @@
+{% extends "layout.html" %}
+
+{% block title %}중급 채점 | 로르샤흐연구회{% endblock %}
+
+{% block content %}
+  {% include "partials/_client_header.html" with active_tab="intermediate" %}
+  
+  {% if not client %}
+    <div class="alert alert-warning">
+      수검자 선택/생성이 필요합니다. 상단 메뉴에서
+      <a href="{% url 'scoring:client_info' %}">채점하기</a>로 이동해 수검자를 먼저 등록하세요.
+    </div>
+  {% endif %}
+
+  <style>
+    .upload-toolbar { gap: .5rem; white-space: nowrap; }
+    .upload-toolbar .file-chooser { min-width: 420px; }
+    @media (max-width: 576px) {
+      .upload-toolbar { white-space: normal; flex-wrap: wrap; }
+      .upload-toolbar .file-chooser { min-width: 260px; }
+    }
+  </style>
+
+  <div class="upload-toolbar d-flex align-items-center flex-nowrap mb-3">
+    <form class="d-flex align-items-center flex-nowrap me-2"
+          method="post"
+          action="{% url 'scoring:search' client.id %}"
+          enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="mode" value="upload_preview">
+      <input class="form-control file-chooser me-2" type="file" name="xlsx_file" accept=".xlsx">
+      <button class="btn btn-sm btn-outline-primary" type="submit">엑셀 업로드</button>
+    </form>
+
+    <a class="btn btn-sm btn-outline-secondary"
+       href="{% url 'scoring:download_response_template' %}">
+      샘플 템플릿 다운로드
+    </a>
+  </div>
+
+  {% include "partials/_response_formset_table.html" %}
+{% endblock %}

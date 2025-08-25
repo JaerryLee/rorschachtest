@@ -1,0 +1,33 @@
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    {% if client %}
+      <h4 class="mb-0">수검자: <strong>{{ client.name }}</strong> ({{ client.get_gender_display }} / {{ client.age }}세)</h4>
+      <small class="text-muted">검사일: {{ client.testDate|date:"Y-m-d" }}</small>
+    {% else %}
+      <h4 class="mb-0">수검자 선택 필요</h4>
+      <small class="text-muted">먼저 수검자 정보를 입력/선택하세요.</small>
+    {% endif %}
+  </div>
+
+  <ul class="nav nav-pills">
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'intermediate' %}active{% endif %}"
+        href="{% if client %}{% url 'scoring:search' client.id %}{% else %}{% url 'scoring:client_info' %}{% endif %}">
+        중급
+      </a>
+    </li>
+
+    {% if request.user.is_authenticated and request.user.group == 'advanced' %}
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'advanced' %}active{% endif %}"
+        href="{% if client %}{% url 'scoring:advanced_upload' client.id %}{% else %}{% url 'scoring:client_list' %}{% endif %}">
+        고급
+      </a>
+    </li>
+    {% endif %}
+
+    <li class="nav-item">
+      <a class="nav-link" href="{% url 'scoring:client_list' %}">검사목록</a>
+    </li>
+  </ul>
+</div>

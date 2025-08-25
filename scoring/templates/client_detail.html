@@ -1,83 +1,80 @@
-{% extends "mypage_base.html" %}
+{% extends "layout.html" %}
 
 {% block content %}
 <style>
-  th {
-    white-space: nowrap;
-}
+  th { white-space: nowrap; }
 </style>
-  <div class="container mt-4">
-    <div class="card mb-4">
-      <div class="card-body">
-        <h2 class="card-title">수검자 정보</h2>
-        <p><strong>이름:</strong> {{ client.name }}</p>
-        <p><strong>성별:</strong> {{ client.get_gender_display }}</p>
-        <a href="{% url 'export_structural_summary_xlsx' client.id %}" class="btn btn-primary">구조요약 다운로드</a>
+
+<div class="container mt-4">
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h2 class="card-title m-0">수검자 정보</h2>
+      <div class="btn-group">
+        <a href="{% url 'scoring:client_list' %}" class="btn btn-outline-secondary">검사목록으로 돌아가기</a>
+        <a href="{% url 'scoring:export_structural_summary_xlsx_auto' client.id %}" class="btn btn-primary">구조요약 다운로드</a>
       </div>
+    </div>
+    <div class="card-body">
+      <p class="mb-1"><strong>이름:</strong> {{ client.name }}</p>
+      <p class="mb-0"><strong>성별:</strong> {{ client.get_gender_display }}</p>
     </div>
   </div>
 
-  <div class="container-fluid">
-    <div class="row justify-content-center">
-      <div class="col-md-12">
-        <div class="card">
-          <div class="card-body">
-            <h2 class="card-title">채점 내역</h2>
-            <a href="{% url 'update_response_codes' client_id=client.id %}" class="btn btn-primary float-right mb-3">수정하기</a>
-            <div class="table-responsive">
-              <table class="table table-bordered table-hover" style="font-size: small;">
-                <thead class="thead-dark">
-                  <tr>
-                    <th style="width:4%;">카드</th>
-                    <th style="width:3%;">N</th>
-                    <th style="width:3.5%;">시간</th>
-                    <th style="width:13%;">반응</th>
-                    <th style="width:25%;">질문</th>
-                    <th style="width:2%;">회전</th>
-                    <th style="width:3%;">반응영역</th>
-                    <th style="width:3%;">발달질</th>
-                    <th style="width:2%;">영역번호</th>
-                    <th style="width:7%;">결정인</th>
-                    <th style="width:3%;">형태질</th>
-                    <th style="width:3%;">(2)</th>
-                    <th style="width:7%;">내용인</th>
-                    <th style="width:3%;">P</th>
-                    <th style="width:4%;">Z</th>
-                    <th style="width:7%;">특수점수</th>
-                    <th style="width:7%;">코멘트</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for code in response_codes %}
-                    <tr style="word-wrap: break-word;">
-                      <td>{{ code.card }}</td>
-                      <td>{{ code.response_num }}</td>
-                      <td>{{ code.time }}</td>
-                      <td>{{ code.response }}</td>
-                      <td>{{ code.inquiry }}</td>
-                      <td>{{ code.rotation }}</td>
-                      <td>{{ code.location }}</td>
-                      <td>{{ code.dev_qual }}</td>
-                      <td>{{ code.loc_num }}</td>
-                      <td>{{ code.determinants }}</td>
-                      <td>{{ code.form_qual }}</td>
-                      <td>{{ code.pair }}</td>
-                      <td>{{ code.content }}</td>
-                      <td>{{ code.popular }}</td>
-                      <td>{{ code.Z }}</td>
-                      <td>{{ code.special }}</td>
-                      <td>{{ code.comment }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h2 class="card-title m-0">채점 내역</h2>
+      <a href="{% url 'scoring:update_response_codes' client_id=client.id %}" class="btn btn-primary">수정하기</a>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover" style="font-size: small;">
+          <thead class="thead-dark">
+            <tr>
+              <th style="width:4%;">카드</th>
+              <th style="width:3%;">N</th>
+              <th style="width:3.5%;">시간</th>
+              <th style="width:13%;">반응</th>
+              <th style="width:25%;">질문</th>
+              <th style="width:2%;">회전</th>
+              <th style="width:3%;">반응영역</th>
+              <th style="width:3%;">발달질</th>
+              <th style="width:2%;">영역번호</th>
+              <th style="width:7%;">결정인</th>
+              <th style="width:3%;">형태질</th>
+              <th style="width:3%;">(2)</th>
+              <th style="width:7%;">내용인</th>
+              <th style="width:3%;">P</th>
+              <th style="width:4%;">Z</th>
+              <th style="width:7%;">특수점수</th>
+              <th style="width:7%;">코멘트</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for code in response_codes %}
+              <tr style="word-wrap: break-word;">
+                <td>{{ code.card }}</td>
+                <td>{{ code.response_num }}</td>
+                <td>{{ code.time }}</td>
+                <td>{{ code.response }}</td>
+                <td>{{ code.inquiry }}</td>
+                <td>{{ code.rotation }}</td>
+                <td>{{ code.location }}</td>
+                <td>{{ code.dev_qual }}</td>
+                <td>{{ code.loc_num }}</td>
+                <td>{{ code.determinants }}</td>
+                <td>{{ code.form_qual }}</td>
+                <td>{{ code.pair }}</td>
+                <td>{{ code.content }}</td>
+                <td>{{ code.popular }}</td>
+                <td>{{ code.Z }}</td>
+                <td>{{ code.special }}</td>
+                <td>{{ code.comment }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
+</div>
 {% endblock %}
-
-
-

@@ -1,0 +1,95 @@
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge"/> <!-- 호환성 설정-->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=0,maximum-scale=10">
+  <script src="https://unpkg.com/htmx.org@1.9.6" integrity="sha384-FhXw7b6AlE/jyjlZH5iHa/tTe9EpJ1Y55RjcgPbjeWMskSxZt1v9qkxLJWNJaGni" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div id="search-results" class="row">
+      <div class="col-md-4">
+        <table class="table table-bordered table-sm">
+    <thead>
+      <tr>
+        <th>P</th>
+        <th>Z점수</th>
+      </tr>
+    </thead>
+    <tbody>
+  {% for PopularResponse in p_response_filter.qs %}
+    {% if forloop.first %} <!-- 첫 번째 데이터만 표시 -->
+      <tr>
+        <td>{{ PopularResponse.p }}</td>
+        <td>{{ PopularResponse.Z }}</td>
+      </tr>
+    {% endif %}
+  {% empty %}
+    <tr>
+      <td colspan="2">No data</td>
+    </tr>
+  {% endfor %}
+</tbody>
+  </table>
+          <div class="table-wrapper" style="height:200px">
+  <table class="table table-bordered table-sm">
+    <thead>
+      <tr>
+        <th>Card</th>
+        <th>LOC</th>
+        <th>Cont</th>
+        <th>FQ</th>
+        <th>Determinants</th>
+        <th>Item</th>
+        <th>&lt;V</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for SearchReference in filter.qs %}
+        <tr>
+          <td>{{ SearchReference.Card }}</td>
+          <td>{{ SearchReference.LOC }}</td>
+          <td>{{ SearchReference.Cont }}</td>
+          <td>{{ SearchReference.FQ }}</td>
+          <td>{{ SearchReference.Determinants }}</td>
+          <td>{{ SearchReference.Item }}</td>
+          <td>{{ SearchReference.V }}</td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="5">No data</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+      </div>
+  </div>
+      <div class="col-md-8">
+      <div class="image-container">
+        {% if image_filter.qs %}
+            {% for image in image_filter.qs %}
+                <div class="hover">
+                    <img src="{{ image.img_file.url }}" alt="Image">
+                </div>
+            {% endfor %}
+          {% if not image_filter.qs|length|divisibleby:4 %}
+                    <div class="empty-image">Blank</div>
+                {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+<script>
+</script>
+</body>
+
+
+
+
+
+
+
+
+
+
+

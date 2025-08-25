@@ -1,10 +1,10 @@
 {% extends 'main.html' %}
 
 {% block content %}
-  <h2>초급용 게시판</h2>
+  <h2>고급용 게시판</h2>
 
   <div style="text-align: right; margin-bottom: 10px;">
-    <form method="get" action="{% url 'board:beginner_board' %}">
+    <form method="get" action="{% url 'board:advanced_board' %}">
       <input type="text" name="search" placeholder="검색어 입력" value="{{ search_query }}">
       <button type="submit">검색</button>
     </form>
@@ -48,6 +48,6 @@
   </div>
 
   <div style="text-align:right">
-  <a href="{% url 'board:create_post' group='beginner' %}" class="btn btn-primary">글쓰기</a></div>
+    <a href="{% url 'board:create_post' group='advanced' %}" class="btn btn-primary">글쓰기</a>
+  </div>
 {% endblock %}
-

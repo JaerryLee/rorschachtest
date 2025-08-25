@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+
+{% block title %}고급 채점 | 로르샤흐연구회{% endblock %}
+
+{% block content %}
+  {% include "partials/_client_header.html" with active_tab="advanced" %}
+
+  {% if not client %}
+    <div class="alert alert-warning mb-3">
+      수검자가 지정되지 않았습니다.
+      <div class="mt-2">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'scoring:client_info' %}">수검자 생성하기</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'scoring:client_list' %}">검사목록</a>
+      </div>
+    </div>
+  {% endif %}
+
+  <style>
+    /* intermediate 화면과 동일한 크기/배치 */
+    .upload-toolbar { gap: .5rem; white-space: nowrap; }
+    .upload-toolbar .file-chooser { min-width: 420px; }
+    @media (max-width: 576px) {
+      .upload-toolbar { white-space: normal; flex-wrap: wrap; }
+      .upload-toolbar .file-chooser { min-width: 260px; }
+    }
+  </style>
+
+  {# 1행: 파일선택 + 엑셀 업로드 + 샘플 템플릿 다운로드 #}
+  <div class="upload-toolbar d-flex align-items-center flex-nowrap mb-2">
+    <form id="advanced-upload-form"
+          class="d-flex align-items-center flex-nowrap me-2"
+          method="post"
+          action="{% url 'scoring:advanced_upload' client.id %}"
+          enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="client" value="{{ client.id }}">
+
+      <input class="form-control file-chooser me-2"
+             type="file" name="file" accept=".xlsx" required>
+
+      <button class="btn btn-sm btn-outline-primary" type="submit">
+        엑셀 업로드
+      </button>
+    </form>
+
+    <a class="btn btn-sm btn-outline-secondary"
+       href="{% url 'scoring:download_response_template' %}">
+      샘플 템플릿 다운로드
+    </a>
+  </div>
+
+  {# 2행: 기존 응답 덮어쓰기 (있을 때만 표시, 같은 form으로 제출됨) #}
+  {% if has_existing %}
+    <div class="mt-1">
+      <div class="form-check">
+        <input class="form-check-input"
+               type="checkbox"
+               name="replace_existing"
+               id="replace_existing"
+               form="advanced-upload-form">
+        <label class="form-check-label" for="replace_existing">
+          기존 응답 덮어쓰기
+        </label>
+      </div>
+      <p class="text-muted small mb-0 mt-1">
+        현재 저장된 응답 <strong>{{ existing_count }}</strong>건이 있습니다.
+        “덮어쓰기”를 체크하면 이 응답들이 삭제되고 업로드 내용으로 <strong>전체 교체</strong>됩니다.
+      </p>
+    </div>
+  {% else %}
+    <p class="text-muted small mb-0 mt-1">
+      저장된 응답이 없습니다. 업로드한 내용이 새로 저장됩니다.
+    </p>
+  {% endif %}
+{% endblock %}

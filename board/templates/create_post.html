@@ -48,7 +48,7 @@
 
 <div class="form-container">
     <h2 style="font-weight:border">글쓰기</h2><br>
-    <form method="post" action="{% url 'board:create_post' group=group %}">
+    <form method="post" action="{% url 'board:create_post' group=group %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="form-group">
             <label for="title">제목</label>

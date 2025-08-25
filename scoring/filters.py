@@ -1,5 +1,6 @@
-from .models import SearchReference, CardImages, PopularResponse
 from django_filters import FilterSet, CharFilter
+from .models import SearchReference, CardImages, PopularResponse
+
 
 class SearchReferenceFilter(FilterSet):
     LOC = CharFilter(field_name='LOC', lookup_expr='icontains', label='LOC')
@@ -8,13 +9,14 @@ class SearchReferenceFilter(FilterSet):
 
     class Meta:
         model = SearchReference
-        fields = ['Card', 'LOC', 'Cont', 'FQ', 'Determinants', 'Item', 'V',]
+        fields = ['Card', 'LOC', 'Cont', 'FQ', 'Determinants', 'Item', 'V']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.form.fields['Card'].required = True
         self.form.fields['LOC'].required = True
         self.form.fields['Cont'].required = True
+
 
 class CardImagesFilter(FilterSet):
     card_number = CharFilter(
@@ -29,6 +31,7 @@ class CardImagesFilter(FilterSet):
 
     def filter_with_card_number(self, queryset, name, value):
         return queryset.filter(card_number=value)
+
 
 class PResponseFilter(FilterSet):
     card_number = CharFilter(

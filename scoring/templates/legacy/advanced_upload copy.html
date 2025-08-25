@@ -1,0 +1,61 @@
+{% extends "layout.html" %}
+
+{% block title %}고급 채점 | 로르샤흐연구회{% endblock %}
+
+{% block content %}
+  {% include "partials/_client_header.html" with active_tab="advanced" %}
+
+  {% if not client %}
+    <div class="alert alert-warning mb-3">
+      수검자가 지정되지 않았습니다.
+      <div class="mt-2">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'scoring:client_info' %}">수검자 생성하기</a>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'scoring:client_list' %}">검사목록</a>
+      </div>
+    </div>
+  {% endif %}
+
+  <div class="d-flex align-items-center flex-wrap gap-2 mb-3" style="gap:.5rem;">
+    <form class="d-flex align-items-center flex-wrap gap-2"
+          method="post"
+          action="{% url 'scoring:advanced_upload' client.id %}"
+          enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="client" value="{{ client.id }}">
+
+      <input class="form-control form-control-sm"
+             style="min-width:360px;max-width:560px;"
+             type="file" name="file" accept=".xlsx" required>
+
+      {# ✅ 기존 데이터가 있을 때만 보여줌 #}
+      {% if has_existing %}
+        <div class="form-check ms-1">
+          <input class="form-check-input" type="checkbox" name="replace_existing" id="replace_existing">
+          <label class="form-check-label" for="replace_existing">
+            기존 응답 덮어쓰기
+          </label>
+        </div>
+      {% endif %}
+
+      <button class="btn btn-sm btn-outline-primary" type="submit">
+        엑셀 업로드
+      </button>
+    </form>
+
+    <a class="btn btn-sm btn-outline-secondary"
+       href="{% url 'scoring:download_response_template' %}">
+      샘플 템플릿 다운로드
+    </a>
+  </div>
+
+  {% if has_existing %}
+    <p class="text-muted small mb-0">
+      현재 저장된 응답 <strong>{{ existing_count }}</strong>건이 있습니다.
+      “덮어쓰기”를 체크하면 이 응답들이 삭제되고 업로드 내용으로 <strong>전체 교체</strong>됩니다.
+    </p>
+  {% else %}
+    <p class="text-muted small mb-0">
+      저장된 응답이 없습니다. 업로드한 내용이 새로 저장됩니다.
+    </p>
+  {% endif %}
+{% endblock %}

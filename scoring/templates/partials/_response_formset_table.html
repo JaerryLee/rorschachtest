@@ -1,0 +1,51 @@
+<form method="post" id="responsecodes-form" autocomplete="off">
+  {% csrf_token %}
+  {{ formset.management_form }}
+
+  <div class="table-wrapper2">
+    <table id="response" class="table table-bordered" style="white-space:nowrap; min-width:1200px;">
+      <thead>
+      <tr>
+        <th style="width:4%;" data-toggle="tooltip" data-placement="bottom" title="로마 또는 아라비아 숫자">카드</th>
+        <th style="width:5%;">N</th>
+        <th style="width:3.5%;">시간</th>
+        <th style="width:13%;">반응</th>
+        <th style="width:25%;">질문</th>
+        <th style="width:2%;" data-toggle="tooltip" data-placement="bottom" title="&lt;:왼쪽, &gt;:오른쪽, v:180도">회전</th>
+        <th style="width:3%;">반응영역</th>
+        <th style="width:3%;">발달질</th>
+        <th style="width:2%;">영역번호</th>
+        <th style="width:7%;">결정인</th>
+        <th style="width:3%;">형태질</th>
+        <th style="width:3%;">(2)</th>
+        <th style="width:7%;">내용인</th>
+        <th style="width:3%;">P</th>
+        <th style="width:4%;">Z</th>
+        <th style="width:7%;" data-toggle="tooltip" data-placement="bottom" title="PHR,GHR은 자동채점">특수점수</th>
+        <th style="width:7%;">코멘트</th>
+      </tr>
+      </thead>
+      <tbody>
+      {% load widget_tweaks %}
+      {% for form in formset %}
+        <tr>
+          {% for field in form %}
+            <td>
+              {% render_field field class="form-control" %}
+              {% for error in field.errors %}
+                <span class="text-danger">{{ error }}</span>
+              {% endfor %}
+            </td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <input type="hidden" value="false" name="additems" id="additems">
+  <div class="d-flex justify-content-end mt-2">
+    <button class="btn btn-primary mx-2" id="additemsbutton" onclick="document.getElementById('additems').value='true'">행 추가</button>
+    <input type="submit" class="btn btn-primary mx-2" value="저장하기">
+  </div>
+</form>

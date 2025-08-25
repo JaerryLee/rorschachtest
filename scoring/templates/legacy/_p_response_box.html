@@ -1,0 +1,10 @@
+<table class="table table-bordered table-sm">
+  <thead><tr><th>P</th><th>Z점수</th></tr></thead>
+  <tbody>
+    {% if p_response and p_response|length > 0 %}
+      <tr><td>{{ p_response.0.p }}</td><td>{{ p_response.0.Z }}</td></tr>
+    {% else %}
+      <tr><td colspan="2">No data</td></tr>
+    {% endif %}
+  </tbody>
+</table>

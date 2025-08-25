@@ -10,8 +10,14 @@ class Post(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE)
     file = models.FileField(upload_to='file', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    group = models.CharField(max_length=20, choices=[('beginner', 'Beginner'), ('intermediate', 'Intermediate')],
-                             default='beginner')
+    group = models.CharField(
+        max_length=20, 
+        choices=[
+            ('beginner', 'Beginner'), 
+            ('intermediate', 'Intermediate'), 
+            ('advanced', 'Advanced'),
+        ],
+        default='beginner')
 
     def __str__(self):
         return self.title

@@ -2,27 +2,46 @@
 
 {% block content %}
   <h2>검사 목록</h2>
-  <table class="table">
-    <thead>
-      <tr>
-        <th>이름</th>
-        <th>나이(검사일 기준)</th>
-        <th>생년월일</th>
-        <th>검사일</th>
-        <th>비고</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for client in clients %}
-        <tr>
-          <td><a href="{% url 'client_detail' client.id %}">{{ client.name }}</a></td>
-          <td>{{ client.age }}</td>
-          <td>{{ client.birthdate|date:"Y-m-d" }}</td>
-          <td>{{ client.testDate|date:"Y-m-d" }}</td>
-          <td>{{ client.notes }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-{% endblock %}
 
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th>이름</th>
+          <th>나이(검사일 기준)</th>
+          <th>생년월일</th>
+          <th>검사일</th>
+          <th>비고</th>
+          <th style="width:280px;">작업</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in clients %}
+          <tr>
+            <td><a href="{% url 'scoring:client_detail' client.id %}">{{ client.name }}</a></td>
+            <td>{{ client.age }}</td>
+            <td>{{ client.birthdate|date:"Y-m-d" }}</td>
+            <td>{{ client.testDate|date:"Y-m-d" }}</td>
+            <td>{{ client.notes }}</td>
+            <td class="text-nowrap">
+              <a class="btn btn-sm btn-outline-primary"
+                 href="{% url 'scoring:search' client.id %}">중급</a>
+
+              {% if request.user.is_authenticated and request.user.group == 'advanced' %}
+                <a class="btn btn-sm btn-outline-success"
+                   href="{% url 'scoring:advanced_upload' client.id %}">고급</a>
+              {% else %}
+                <button class="btn btn-sm btn-outline-secondary" disabled>고급</button>
+              {% endif %}
+
+              <a class="btn btn-sm btn-outline-secondary"
+                 href="{% url 'scoring:client_detail' client.id %}">상세</a>
+              <a class="btn btn-sm btn-outline-info"
+                 href="{% url 'scoring:export_structural_summary_xlsx_auto' client.id %}">요약 XLSX</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+{% block title %}고급 업로드{% endblock %}
+{% block content %}
+  <h3 class="mb-3">고급: 응답 엑셀 업로드</h3>
+  <div class="mb-3">
+    <a class="btn btn-outline-secondary" href="{% url 'download_response_template' %}">엑셀 템플릿 다운로드</a>
+  </div>
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="alert alert-{{ m.tags }}">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="card p-3">
+    {% csrf_token %}
+    <div class="form-group">
+      <label>수검자</label>
+      {{ form.client }}
+    </div>
+    <div class="form-group">
+      <label>엑셀 파일(.xlsx)</label>
+      {{ form.file }}
+    </div>
+    <div class="form-check mb-3">
+      {{ form.replace_existing }} <label class="form-check-label">기존 응답 덮어쓰기</label>
+    </div>
+    <button class="btn btn-primary">업로드</button>
+  </form>
+
+  {% if errors %}
+    <hr>
+    <h5>오류 목록</h5>
+    <ul class="text-danger">
+      {% for e in errors %}
+        <li>{{ e }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endblock %}

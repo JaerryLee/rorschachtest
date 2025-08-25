@@ -3,7 +3,6 @@
 {% block content %}
   <h2>중급용 게시판</h2>
 
-  <!-- 검색 기능 추가 -->
   <div style="text-align: right; margin-bottom: 10px;">
     <form method="get" action="{% url 'board:intermediate_board' %}">
       <input type="text" name="search" placeholder="검색어 입력" value="{{ search_query }}">
@@ -11,7 +10,6 @@
     </form>
   </div>
 
-  <!-- 게시글 목록 테이블 추가 -->
   <table class="table">
     <thead>
       <tr>
@@ -31,7 +29,6 @@
     </tbody>
   </table>
 
-  <!-- 페이지네이션 추가 -->
   <div class="pagination">
     <span class="step-links">
       {% if posts.has_previous %}
@@ -50,7 +47,6 @@
     </span>
   </div>
 
-  <!-- '글쓰기' 버튼 추가 -->
 <div style="text-align:right">
   <a href="{% url 'board:create_post' group='intermediate' %}" class="btn btn-primary">글쓰기</a></div>
 {% endblock %}
