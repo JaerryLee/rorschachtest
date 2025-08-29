@@ -102,19 +102,11 @@ def to_roman(val: str) -> str:
     return num_to_roman.get(s, s)
 
 def _pick_input_sheet(wb):
-    """
-    우선순위:
-      1) 이름이 '입력' 인 시트
-      2) 이름이 'responses' 인 시트
-      3) 모든 시트 스캔: 1행의 셀들을 normalize했을 때 REQUIRED_FIELDS 가 전부 매핑되는 시트
-      4) 마지막으로 wb.active
-    """
-    # 1, 2 우선
+
     for name in ('입력', 'responses'):
         if name in wb.sheetnames:
             return wb[name]
 
-    # 3) 스캔
     for name in wb.sheetnames:
         ws_try = wb[name]
         raw = [(c.value or '') for c in ws_try[1]]
@@ -236,9 +228,6 @@ def search(request, client_id=None):
     max_total = 70
     ResponseCodeFormSet = formset_factory(ResponseCodeForm, extra=extra_forms, max_num=max_total)
 
-    # ─────────────────────────────
-    # ① 엑셀 업로드 → 폼 미리채움
-    # ─────────────────────────────
     if request.method == 'POST' and request.POST.get('mode') == 'upload_preview':
         xfile = request.FILES.get('xlsx_file')
         if not xfile:
@@ -278,7 +267,6 @@ def search(request, client_id=None):
                                     pass
                         initial.append(data)
 
-                    # formset max_num 보호
                     if len(initial) > max_total:
                         initial = initial[:max_total]
                         messages.warning(request, f"최대 {max_total}행까지만 미리 채웁니다.")
@@ -286,7 +274,6 @@ def search(request, client_id=None):
                     formset = ResponseCodeFormSet(initial=initial)
                     messages.success(request, f"엑셀에서 {len(initial)}건을 불러왔습니다. 확인 후 저장하세요.")
 
-        # 참고 패널용 컨텍스트 (주석으로 비활성 중이어도 문제 없음)
         reference_list = SearchReference.objects.all()
         card_image_list = CardImages.objects.all()
         Presponse_list = PopularResponse.objects.all()
@@ -306,9 +293,6 @@ def search(request, client_id=None):
             },
         )
 
-    # ─────────────────────────────
-    # ② 기존 POST(행 추가/저장) 처리
-    # ─────────────────────────────
     if request.method == 'POST':
         if request.POST.get('additems') == 'true':
             formset_dictionary_copy = request.POST.copy()
@@ -340,13 +324,12 @@ def search(request, client_id=None):
                 if warnings:
                     messages.warning(
                         request,
-                        f"Z 권고 위반 {len(warnings)}건(행: {', '.join(map(str, warnings))}). "
+                        f"Z점수 재검토 권고 {len(warnings)}건(행: {', '.join(map(str, warnings))}). "
                         "Z가 결과(예: Zf/Zsum/Zd)에 영향을 줄 수 있으니 검토하세요."
                     )
                 messages.success(request, f"{created}건 저장되었습니다.")
                 return redirect('scoring:client_detail', client_id=client.id)
             else:
-                # 어떤 필드가 막혔는지 보기 좋게
                 details = []
                 for i, f in enumerate(formset.forms, start=1):
                     if f.errors:
@@ -354,25 +337,10 @@ def search(request, client_id=None):
                             details.append(f"{i}행 {k}: {', '.join(errs)}")
                 if details:
                     messages.error(request, "입력 오류: " + " / ".join(details))
-            """formset = ResponseCodeFormSet(request.POST)
-            if formset.is_valid():
-                created = 0
-                for form in formset:
-                    if form.cleaned_data.get('card') and form.cleaned_data.get('response'):
-                        form.instance.client = client
-                        form.save()
-                        created += 1
-                messages.success(request, f"{created}건 저장되었습니다.")
-                
-                return redirect('scoring:client_detail', client_id=client.id)
-            else:
-                messages.error(request, f"입력 오류가 있습니다. 확인해 주세요: {formset.errors}")"""
     else:
         formset = ResponseCodeFormSet()
 
-    # ─────────────────────────────
-    # ③ GET 렌더(기본)
-    # ─────────────────────────────
+
     reference_list = SearchReference.objects.all()
     card_image_list = CardImages.objects.all()
     Presponse_list = PopularResponse.objects.all()
@@ -398,69 +366,6 @@ def search(request, client_id=None):
         },
     )
 
-'''
-@group_min_required('intermediate')
-def search(request, client_id=None):
-    client_id = client_id or request.GET.get('client_id')
-    if not client_id:
-        return HttpResponseNotFound("client_id가 필요합니다.")
-
-    client = get_object_or_404(Client, id=client_id)
-
-    # 소유자 확인
-    if client.tester != request.user:
-        return HttpResponse("액세스 거부: 작성 권한이 없습니다.", status=403)
-
-    extra_forms = 40
-    ResponseCodeFormSet = formset_factory(ResponseCodeForm, extra=extra_forms, max_num=70)
-
-    if request.method == 'POST':
-        if request.POST.get('additems') == 'true':
-            formset_dictionary_copy = request.POST.copy()
-            formset_dictionary_copy['form-TOTAL_FORMS'] = int(formset_dictionary_copy['form-TOTAL_FORMS']) + 1
-            formset = ResponseCodeFormSet(formset_dictionary_copy)
-        else:
-            formset = ResponseCodeFormSet(request.POST)
-            if formset.is_valid():
-                for form in formset:
-                    if form.cleaned_data.get('card') and form.cleaned_data.get('response'):
-                        form.instance.client = client
-                        form.save()
-                # ✅ 네임스페이스 명시
-                return redirect('scoring:client_list')
-    else:
-        formset = ResponseCodeFormSet()
-
-    # 필터/참고데이터 그대로
-    reference_list = SearchReference.objects.all()
-    card_image_list = CardImages.objects.all()
-    Presponse_list = PopularResponse.objects.all()
-
-    search_filter = SearchReferenceFilter(request.GET, queryset=reference_list)
-    card_image_filter = CardImagesFilter(request.GET, queryset=card_image_list)
-    p_response_filter = PResponseFilter(request.GET, queryset=Presponse_list)
-
-    if request.GET.get('Card'):
-        card_number = request.GET['Card']
-        card_image_filter = CardImagesFilter(request.GET, queryset=CardImages.objects.filter(card_number=card_number))
-        p_response_filter = PResponseFilter(request.GET, queryset=PopularResponse.objects.filter(card_number=card_number))
-
-    return render(
-        request,
-        'intermediate.html',
-        {
-            'client': client,
-            'formset': formset,
-            'filter': search_filter,
-            'image_filter': card_image_filter,
-            'p_response_filter': p_response_filter,
-        },
-    )
-
-'''
-# ---------------------------------------------------------------------
-# 기존 반응 수정(중급) – client_id 필요
-# ---------------------------------------------------------------------
 @group_min_required('intermediate')
 def update_response_codes(request, client_id):
     client = get_object_or_404(Client, id=client_id)
@@ -511,54 +416,16 @@ def update_response_codes(request, client_id):
         },
     )
 
-'''
-# ---------------------------------------------------------------------
-# 고급(엑셀 템플릿 다운로드)
-# ---------------------------------------------------------------------
-@group_min_required('advanced')
-def download_response_template(request):
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "responses"
-    headers = [
-        'card','response_num','time','response','inquiry','rotation','location',
-        'dev_qual','loc_num','determinants','form_qual','pair','content','popular','Z','special','comment'
-    ]
-    ws.append(headers)
-    # 샘플 한 줄
-    ws.append(['I', 1, '12s', '박쥐', '윗부분이 날개 같아요', '', 'W', '+', '', 'M.F', '+', '', 'H', 'P', 'ZW', '', ''])
-
-    bold = Font(bold=True)
-    for c in range(1, len(headers) + 1):
-        ws.cell(row=1, column=c).font = bold
-        ws.cell(row=1, column=c).alignment = Alignment(horizontal='center')
-
-    xlsx = save_virtual_workbook(wb)
-    resp = HttpResponse(
-        xlsx,
-        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    )
-    resp['Content-Disposition'] = 'attachment; filename="response_template.xlsx"'
-    return resp
-
-'''
-# ---------------------------------------------------------------------
-# 고급(엑셀 업로드) – client_id를 경로 파라미터로 받음
-# ---------------------------------------------------------------------
-
 @group_min_required('advanced')
 def advanced_upload(request, client_id):
     client = get_object_or_404(Client, id=client_id)
 
-    # 소유권 확인
     if client.tester != request.user:
         return HttpResponseForbidden("본인 수검자에게만 업로드할 수 있습니다.")
 
-    # ✅ 기존 데이터 존재 여부/개수 계산
     existing_count = ResponseCode.objects.filter(client=client).count()
     has_existing = existing_count > 0
 
-    # BulkResponseUploadForm 초기화는 그대로…
     form = BulkResponseUploadForm(request.user, request.POST or None, request.FILES or None)
     form.fields['client'].queryset = Client.objects.filter(id=client.id, tester=request.user)
     if request.method == 'GET' and not form.is_bound:
@@ -708,10 +575,6 @@ def add_client(request):
         })
     return render(request, 'add_client.html', {'form': form})
 
-
-# ---------------------------------------------------------------------
-# 수검자 목록/상세
-# ---------------------------------------------------------------------
 @group_min_required('intermediate')
 def client_list(request):
     user = request.user
@@ -2009,22 +1872,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     )
     response['Content-Disposition'] = 'attachment; filename=structural_summary_advanced.xlsx'
     return response
-'''
-@group_min_required('intermediate')
-def export_structural_summary_xlsx_auto(request, client_id):
-    # 고급 사용자인지 먼저 확인
-    is_advanced_user = getattr(request.user, 'group', '') == 'advanced'
 
-    # 고급용 export 함수가 정의되어 있으면 우선 사용
-    advanced_export = globals().get('export_structural_summary_xlsx_advanced') \
-                      or globals().get('advanced_export_structural_summary_xlsx')
-
-    if is_advanced_user and callable(advanced_export):
-        return advanced_export(request, client_id)
-
-    # 없으면 기본(중급) export 사용
-    return export_structural_summary_xlsx(request, client_id)
-'''
 @group_min_required('intermediate')
 def export_structural_summary_xlsx_auto(request, client_id):
     if getattr(request.user, 'group', '') == 'advanced':
