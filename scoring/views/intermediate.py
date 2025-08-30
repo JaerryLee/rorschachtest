@@ -515,6 +515,8 @@ def add_client(request):
             client_instance = form.save(commit=False)
             client_instance.tester = request.user
             client_instance.save()
+            if next_target == 'advanced':
+                return redirect('scoring:advanced_upload', client_id=client_instance.id)
             return redirect('scoring:search', client_id=client_instance.id)
     else:
         form = ClientForm(initial={
@@ -525,7 +527,11 @@ def add_client(request):
             'notes': request.GET.get('notes', ''),
             'consent': request.GET.get('consent', ''),
         })
-    return render(request, 'add_client.html', {'form': form})
+
+    return render(request, 'add_client.html', {
+        'form': form,
+        'next': request.GET.get('next', 'intermediate'),
+    })
 
 
 @group_min_required('intermediate')
