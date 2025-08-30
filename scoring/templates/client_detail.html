@@ -3,17 +3,54 @@
 {% block content %}
 <style>
   th { white-space: nowrap; }
+
+  .btn-duo .btn {
+    min-width: 160px;
+    font-weight: 400;
+    border-width: 2px;
+  }
+  .btn-mid {
+    background: linear-gradient(180deg, #e9f7ff, #dff1ff);
+    border-color: #74c0fc;
+    color: #0b5ed7;
+  }
+  .btn-mid:hover {
+    background: #e1f3ff;
+    color: #084298;
+  }
+  .btn-adv {
+    background: linear-gradient(180deg, #eaf7ea, #e2f4e2);
+    border-color: #8ad38a;
+    color: #137c13;
+  }
+  .btn-adv:hover {
+    background: #def1de;
+    color: #0f6a0f;
+  }
 </style>
 
 <div class="container mt-4">
   <div class="card mb-4">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
       <h2 class="card-title m-0">수검자 정보</h2>
-      <div class="btn-group">
-        <a href="{% url 'scoring:client_list' %}" class="btn btn-outline-secondary">검사목록으로 돌아가기</a>
-        <a href="{% url 'scoring:export_structural_summary_xlsx_auto' client.id %}" class="btn btn-primary">구조요약 다운로드</a>
+      <div class="d-flex align-items-center">
+        <a href="{% url 'scoring:client_list' %}" class="btn btn-outline-secondary mr-2">
+          검사목록으로 돌아가기
+        </a>
+
+        <div class="btn-duo">
+          <a href="{% url 'scoring:export_structural_summary_xlsx' client.id %}" class="btn btn-mid shadow-sm">
+            중급 요약 다운로드
+          </a>
+          {% if request.user.is_authenticated and request.user.group == 'advanced' %}
+          <a href="{% url 'scoring:export_structural_summary_xlsx_advanced' client.id %}" class="btn btn-adv shadow-sm ml-2">
+            고급 요약 다운로드
+          </a>
+          {% endif %}
+        </div>
       </div>
     </div>
+
     <div class="card-body">
       <p class="mb-1"><strong>이름:</strong> {{ client.name }}</p>
       <p class="mb-0"><strong>성별:</strong> {{ client.get_gender_display }}</p>
@@ -30,8 +67,8 @@
         <table class="table table-bordered table-hover" style="font-size: small;">
           <thead class="thead-dark">
             <tr>
-              <th style="width:4%;">카드</th>
               <th style="width:3%;">N</th>
+              <th style="width:4%;">카드</th>
               <th style="width:3.5%;">시간</th>
               <th style="width:13%;">반응</th>
               <th style="width:25%;">질문</th>
@@ -52,8 +89,8 @@
           <tbody>
             {% for code in response_codes %}
               <tr style="word-wrap: break-word;">
-                <td>{{ code.card }}</td>
                 <td>{{ code.response_num }}</td>
+                <td>{{ code.card }}</td>
                 <td>{{ code.time }}</td>
                 <td>{{ code.response }}</td>
                 <td>{{ code.inquiry }}</td>

@@ -13,6 +13,8 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.db.models import IntegerField, Value
+from django.db.models.functions import Cast, Coalesce
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -424,7 +426,12 @@ def update_response_codes(request, client_id):
     if client.tester != request.user:
         return HttpResponse("액세스 거부: 작성 권한이 없습니다.", status=403)
 
-    response_codes = ResponseCode.objects.filter(client=client)
+    response_codes = (
+        ResponseCode.objects
+        .filter(client=client)
+        .annotate(n_int=Cast(Coalesce('response_num', Value(0)), IntegerField()))
+        .order_by('n_int', 'card', 'id')
+    )
 
     current = response_codes.count()
     extra = max(0, min(DEFAULT_EXTRA, TOTAL_CAP - current))
@@ -545,7 +552,12 @@ def client_list(request):
 def client_detail(request, client_id):
     user = request.user
     client_obj = get_object_or_404(Client, id=client_id, tester=user)
-    response_codes = ResponseCode.objects.filter(client=client_obj)
+    response_codes = (
+        ResponseCode.objects
+        .filter(client=client_obj)
+        .annotate(n_int=Cast(Coalesce('response_num', Value(0)), IntegerField()))
+        .order_by('n_int', 'card', 'id')
+    )
     return render(request, 'client_detail.html', {'client': client_obj, 'response_codes': response_codes})
 
 
@@ -1076,7 +1088,12 @@ def export_structural_summary_xlsx(request, client_id):
 
 @group_min_required('intermediate')
 def edit_responses(request, client_id):
-    response_codes = ResponseCode.objects.filter(client_id=client_id)
+    response_codes = (
+        ResponseCode.objects
+        .filter(client_id=client_id)
+        .annotate(n_int=Cast(Coalesce('response_num', Value(0)), IntegerField()))
+        .order_by('n_int', 'card', 'id')
+    )
     current = response_codes.count()
     extra = max(0, min(DEFAULT_EXTRA, TOTAL_CAP - current))
     ResponseCodeFormSet = modelformset_factory(ResponseCode, form=ResponseCodeForm, extra=extra, max_num=TOTAL_CAP)

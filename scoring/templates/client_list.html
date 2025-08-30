@@ -35,9 +35,8 @@
               {% endif %}
 
               <a class="btn btn-sm btn-outline-secondary"
-                 href="{% url 'scoring:client_detail' client.id %}">상세</a>
-              <a class="btn btn-sm btn-outline-info"
-                 href="{% url 'scoring:export_structural_summary_xlsx_auto' client.id %}">요약 XLSX</a>
+                 href="{% url 'scoring:client_detail' client.id %}">상세 페이지</a>
+              
             </td>
           </tr>
         {% endfor %}
