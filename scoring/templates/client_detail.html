@@ -4,29 +4,33 @@
 <style>
   th { white-space: nowrap; }
 
-  .btn-duo .btn {
-    min-width: 160px;
-    font-weight: 400;
-    border-width: 2px;
+  .btn-duo .btn { min-width:160px; font-weight:400; border-width:2px; }
+  .btn-mid { background:linear-gradient(180deg,#e9f7ff,#dff1ff); border-color:#74c0fc; color:#0b5ed7; }
+  .btn-mid:hover { background:#e1f3ff; color:#084298; }
+  .btn-adv { background:linear-gradient(180deg,#eaf7ea,#e2f4e2); border-color:#8ad38a; color:#137c13; }
+  .btn-adv:hover { background:#def1de; color:#0f6a0f; }
+
+  .table-scroll { max-height: 60vh; overflow: auto; }
+  .table thead th { position: sticky; top: 0; z-index: 1; }
+
+  .cell-preview {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    position: relative;
+    line-height: 1.5;
   }
-  .btn-mid {
-    background: linear-gradient(180deg, #e9f7ff, #dff1ff);
-    border-color: #74c0fc;
-    color: #0b5ed7;
+  .cell-preview::after {
+    content: "";
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1.2em;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), #fff);
   }
-  .btn-mid:hover {
-    background: #e1f3ff;
-    color: #084298;
-  }
-  .btn-adv {
-    background: linear-gradient(180deg, #eaf7ea, #e2f4e2);
-    border-color: #8ad38a;
-    color: #137c13;
-  }
-  .btn-adv:hover {
-    background: #def1de;
-    color: #0f6a0f;
-  }
+  td.clickable { cursor: zoom-in; }
+
+  .modal-text { white-space: pre-wrap; line-height: 1.7; }
 </style>
 
 <div class="container mt-4">
@@ -34,23 +38,15 @@
     <div class="card-header d-flex flex-wrap justify-content-between align-items-center">
       <h2 class="card-title m-0">수검자 정보</h2>
       <div class="d-flex align-items-center">
-        <a href="{% url 'scoring:client_list' %}" class="btn btn-outline-secondary mr-2">
-          검사목록으로 돌아가기
-        </a>
-
+        <a href="{% url 'scoring:client_list' %}" class="btn btn-outline-secondary mr-2">검사목록으로 돌아가기</a>
         <div class="btn-duo">
-          <a href="{% url 'scoring:export_structural_summary_xlsx' client.id %}" class="btn btn-mid shadow-sm">
-            중급 요약 다운로드
-          </a>
+          <a href="{% url 'scoring:export_structural_summary_xlsx' client.id %}" class="btn btn-mid shadow-sm">중급 요약 다운로드</a>
           {% if request.user.is_authenticated and request.user.group == 'advanced' %}
-          <a href="{% url 'scoring:export_structural_summary_xlsx_advanced' client.id %}" class="btn btn-adv shadow-sm ml-2">
-            고급 요약 다운로드
-          </a>
+          <a href="{% url 'scoring:export_structural_summary_xlsx_advanced' client.id %}" class="btn btn-adv shadow-sm ml-2">고급 요약 다운로드</a>
           {% endif %}
         </div>
       </div>
     </div>
-
     <div class="card-body">
       <p class="mb-1"><strong>이름:</strong> {{ client.name }}</p>
       <p class="mb-0"><strong>성별:</strong> {{ client.get_gender_display }}</p>
@@ -62,9 +58,9 @@
       <h2 class="card-title m-0">채점 내역</h2>
       <a href="{% url 'scoring:update_response_codes' client_id=client.id %}" class="btn btn-primary">수정하기</a>
     </div>
-    <div class="card-body">
-      <div class="table-responsive">
-        <table class="table table-bordered table-hover" style="font-size: small;">
+    <div class="card-body p-0">
+      <div class="table-scroll">
+        <table class="table table-bordered table-hover m-0" style="font-size: small;">
           <thead class="thead-dark">
             <tr>
               <th style="width:3%;">N</th>
@@ -88,25 +84,31 @@
           </thead>
           <tbody>
             {% for code in response_codes %}
-              <tr style="word-wrap: break-word;">
-                <td>{{ code.response_num }}</td>
-                <td>{{ code.card }}</td>
-                <td>{{ code.time }}</td>
-                <td>{{ code.response }}</td>
-                <td>{{ code.inquiry }}</td>
-                <td>{{ code.rotation }}</td>
-                <td>{{ code.location }}</td>
-                <td>{{ code.dev_qual }}</td>
-                <td>{{ code.loc_num }}</td>
-                <td>{{ code.determinants }}</td>
-                <td>{{ code.form_qual }}</td>
-                <td>{{ code.pair }}</td>
-                <td>{{ code.content }}</td>
-                <td>{{ code.popular }}</td>
-                <td>{{ code.Z }}</td>
-                <td>{{ code.special }}</td>
-                <td>{{ code.comment }}</td>
-              </tr>
+            <tr class="detail-row"
+                data-card="{{ code.card }}"
+                data-n="{{ code.response_num }}"
+                data-response="{{ code.response|default:''|escapejs }}"
+                data-inquiry="{{ code.inquiry|default:''|escapejs }}">
+              <td>{{ code.response_num }}</td>
+              <td>{{ code.card }}</td>
+              <td>{{ code.time }}</td>
+
+              <td class="clickable"><div class="cell-preview">{{ code.response }}</div></td>
+              <td class="clickable"><div class="cell-preview">{{ code.inquiry }}</div></td>
+
+              <td>{{ code.rotation }}</td>
+              <td>{{ code.location }}</td>
+              <td>{{ code.dev_qual }}</td>
+              <td>{{ code.loc_num }}</td>
+              <td>{{ code.determinants }}</td>
+              <td>{{ code.form_qual }}</td>
+              <td>{{ code.pair }}</td>
+              <td>{{ code.content }}</td>
+              <td>{{ code.popular }}</td>
+              <td>{{ code.Z }}</td>
+              <td>{{ code.special }}</td>
+              <td>{{ code.comment }}</td>
+            </tr>
             {% endfor %}
           </tbody>
         </table>
@@ -114,4 +116,52 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="detailModal" tabindex="-1" role="dialog" aria-labelledby="detailModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="detailModalLabel">상세 보기</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="닫기">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <h6 class="mb-1">반응</h6>
+        <div id="modalResponse" class="modal-text mb-3"></div>
+        <h6 class="mb-1">질문</h6>
+        <div id="modalInquiry" class="modal-text"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">닫기</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  document.addEventListener('click', function (e) {
+    const cell = e.target.closest('td.clickable');
+    if (!cell) return;
+    const row = cell.closest('.detail-row');
+    if (!row) return;
+
+    const title = `카드 ${row.dataset.card} · N ${row.dataset.n}`;
+    const resp  = row.dataset.response || '';
+    const inq   = row.dataset.inquiry || '';
+
+    document.getElementById('detailModalLabel').textContent = title;
+    document.getElementById('modalResponse').textContent = resp;
+    document.getElementById('modalInquiry').textContent = inq;
+
+    if (typeof $ !== 'undefined' && typeof $.fn.modal === 'function') {
+      $('#detailModal').modal('show');
+    } else {
+      document.getElementById('detailModal').classList.add('show');
+      document.getElementById('detailModal').style.display = 'block';
+      document.body.classList.add('modal-open');
+    }
+  });
+</script>
 {% endblock %}

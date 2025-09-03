@@ -5,6 +5,19 @@ import re
 
 from .models import Client, ResponseCode
 
+class YMDTextInput(forms.TextInput):
+    def __init__(self, *args, **kwargs):
+        base = {
+            'placeholder': 'YYYY-MM-DD',
+            'inputmode': 'numeric',            
+            'pattern': r'\d{4}-\d{2}-\d{2}',
+            'maxlength': '10',
+            'autocomplete': 'off',
+            'class': 'form-control',
+        }
+        extra = kwargs.pop('attrs', {})
+        base.update(extra)
+        super().__init__(attrs=base)
 
 class BulkResponseUploadForm(forms.Form):
     client = forms.ModelChoiceField(queryset=Client.objects.none(), label='수검자')
@@ -109,29 +122,82 @@ def validate_pair(value):
         raise ValidationError("2 입력")
     return value
 
+class DateInput(forms.DateInput):
+    input_type = 'date'
 
 class ClientForm(forms.ModelForm):
     class Meta:
         model = Client
-        fields = ['name', 'gender', 'birthdate', 'testDate', 'notes', 'consent']
+        fields = [
+            'consent',
+            'examiner_name',
+            'name', 'gender',
+            'birthdate', 'testDate',
+            'evaluation_purpose',
+            'rorschach_history',
+            'current_psych_treatment', 'current_psych_dx',
+            'past_psych_treatment', 'past_psych_dx',
+            'notes',
+        ]
+        labels = {
+            'consent': '데이터 연구활용 동의',
+            'examiner_name': '검사자 이름(실명)',
+            'name': '수검자 이름(실명)',
+            'gender': '수검자 성별',
+            'birthdate': '수검자 생년월일',
+            'testDate': '검사일',
+            'evaluation_purpose': '평가 목적',
+            'rorschach_history': '로르샤흐 검사 수검 이력',
+            'current_psych_treatment': '현재 정신과 치료 유무',
+            'current_psych_dx': '진단명(현재)',
+            'past_psych_treatment': '과거 정신과 치료 유무',
+            'past_psych_dx': '진단명(과거)',
+            'notes': '비고',
+        }
+        widgets = {
+            'examiner_name': forms.TextInput(attrs={
+                'class': 'form-control',
+            }),
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'birthdate': YMDTextInput(),
+            'testDate': YMDTextInput(), 
+            # 'birthdate': DateInput(attrs={'class': 'form-control'}),
+            # 'testDate': DateInput(attrs={'class': 'form-control'}),
+            'evaluation_purpose': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '예: 진단 목적, 임상평가, 연구 등'}),
+            'rorschach_history': forms.Select(attrs={'class': 'form-control'}),
+            'current_psych_treatment': forms.Select(attrs={'class': 'form-control'}),
+            'current_psych_dx': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '치료중인 경우 진단명 입력'}),
+            'past_psych_treatment': forms.Select(attrs={'class': 'form-control'}),
+            'past_psych_dx': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '과거 치료가 있었던 경우 진단명 입력'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
+            'consent': forms.CheckboxInput(attrs={}),
+        }
 
-    name = forms.CharField(widget=forms.TextInput(attrs={'class': 'form-control'}))
     gender = forms.ChoiceField(
         choices=[('M', '남성'), ('F', '여성'), ('O', '기타')],
+        initial='M',
+        required=True,
         widget=forms.Select(attrs={'class': 'form-control'})
     )
-    birthdate = forms.DateField(widget=forms.DateInput(attrs={'class': 'form-control'}))
-    testDate = forms.DateField(widget=forms.DateInput(attrs={'class': 'form-control'}))
-    notes = forms.CharField(widget=forms.Textarea(attrs={'class': 'form-control'}), required=False)
-    consent = forms.BooleanField(required=True, widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}))
+    consent = forms.BooleanField(
+        required=True,
+        widget=forms.CheckboxInput(attrs={}),
+        error_messages={'required': '데이터 연구활용 동의가 필요합니다.'}
+    )
 
     def clean(self):
-        cleaned_data = super().clean()
-        birthdate = cleaned_data.get('birthdate')
-        testDate = cleaned_data.get('testDate')
+        cleaned = super().clean()
+        birthdate = cleaned.get('birthdate')
+        testDate = cleaned.get('testDate')
         if birthdate and testDate and testDate < birthdate:
-            raise forms.ValidationError("검사일은 생년월일 이후여야 합니다.")
-        return cleaned_data
+            raise ValidationError("검사일은 생년월일 이후여야 합니다.")
+
+        if cleaned.get('current_psych_treatment') == 'treat' and not cleaned.get('current_psych_dx'):
+            self.add_error('current_psych_dx', '치료중을 선택하면 진단명을 입력해 주세요.')
+        if cleaned.get('past_psych_treatment') == 'yes' and not cleaned.get('past_psych_dx'):
+            self.add_error('past_psych_dx', '치료받은 적 있음 선택 시 진단명을 입력해 주세요.')
+        return cleaned
+
 
 
 class ResponseCodeForm(forms.ModelForm):

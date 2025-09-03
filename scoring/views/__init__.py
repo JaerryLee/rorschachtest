@@ -18,7 +18,6 @@ from .advanced import (
     advanced_entry,
     advanced_edit_responses,
 )
-from .export_auto import export_structural_summary_xlsx_auto
 export_structural_summary_xlsx = export_structural_summary_xlsx_intermediate
 download_response_template_intermediate = download_response_template
 download_response_template_advanced = download_response_template
@@ -33,8 +32,4 @@ __all__ = [
     # advanced
     "advanced_entry", "advanced_upload", "advanced_edit_responses",
     "download_response_template_advanced", "export_structural_summary_xlsx_advanced",
-    # auto router
-    "export_structural_summary_xlsx_auto", "download_response_template_intermediate",    
 ]
-
-
