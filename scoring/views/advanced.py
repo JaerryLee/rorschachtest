@@ -5,9 +5,11 @@ from collections import Counter
 from io import BytesIO
 import json
 import re
+import math
 
 import pandas as pd
 import numpy as np
+from urllib.parse import quote
 
 from django.conf import settings
 from django.contrib import messages
@@ -22,6 +24,7 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.text import slugify
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -117,6 +120,20 @@ def _pick_input_sheet(wb):
 
 def _row_is_blank(row_tuple):
     return all((v is None) or (str(v).strip() == '') for v in row_tuple)
+
+_TOKEN_SEP = r"[,\s;+/]+"
+
+def _normalize_special_tokens(s: str) -> str:
+    if not s:
+        return s
+    toks = re.split(_TOKEN_SEP, str(s).strip())
+    toks = [t.strip().upper() for t in toks if t and t.strip()]
+    return ", ".join(dict.fromkeys(toks))
+
+def _detect_token(s: str, token: str) -> bool:
+    if not s:
+        return False
+    return re.search(rf"(^|{_TOKEN_SEP}){re.escape(token)}($|{_TOKEN_SEP})", s, flags=re.IGNORECASE) is not None
 
 
 @group_min_required('advanced')
@@ -320,7 +337,7 @@ def _read_json_df(path: Path, required_cols=None) -> pd.DataFrame:
         )
         if is_area_stats:
             for card, areas in raw.items():
-                if not isinstance(areas, dict): 
+                if not isinstance(areas, dict):
                     continue
                 for area_name, stat in areas.items():
                     if isinstance(stat, dict) and {'mean','std'} <= set(stat.keys()):
@@ -333,7 +350,7 @@ def _read_json_df(path: Path, required_cols=None) -> pd.DataFrame:
                                for areas in raw.values())
         if is_symbol_scores:
             for card, areas in raw.items():
-                if not isinstance(areas, dict): 
+                if not isinstance(areas, dict):
                     continue
                 for area_name, symbols in areas.items():
                     if isinstance(symbols, dict):
@@ -443,6 +460,19 @@ def _apply_symbol_score(df, score_table_df):
         df[f'{area}_점수'] = score_dict[area]
     return df
 
+def _count_col_shd_blends(codes):
+    color = {'FC', 'CF', 'C'}
+    shading = {"FC'", "C'F", "C'", 'FT', 'TF', 'T', 'FV', 'VF', 'V', 'FY', 'YF', 'Y'}
+    cnt = 0
+    for rc in codes:
+        det = _normalize_text_value(getattr(rc, 'determinants', '') or '')
+        if not det:
+            continue
+        has_color = any(_detect_token(det, t) for t in color)
+        has_shading = any(_detect_token(det, t) for t in shading)
+        if has_color and has_shading:
+            cnt += 1
+    return cnt
 
 @group_min_required('advanced')
 def export_structural_summary_xlsx_advanced(request, client_id):
@@ -460,12 +490,11 @@ def export_structural_summary_xlsx_advanced(request, client_id):
             missing_roman = [to_roman(n) for n in missing]
             return HttpResponse("다음 카드의 반응이 없습니다: " + ", ".join(missing_roman))
 
-        structural_summary, created = StructuralSummary.objects.get_or_create(client_id=client_id)
-        if not created:
-            try:
-                structural_summary.calculate_values()
-            except Exception:
-                structural_summary.save()
+        structural_summary, _ = StructuralSummary.objects.get_or_create(client_id=client_id)
+        try:
+            structural_summary.calculate_values()
+        except Exception:
+            structural_summary.save()
 
     except Client.DoesNotExist:
         logging.error("해당 ID의 클라이언트를 찾을 수 없음")
@@ -474,114 +503,75 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         logging.error(f"예기치 못한 오류 발생: {e}")
         return JsonResponse({'error': f"{type(e).__name__}: {str(e)}"}, status=500)
 
+    PASTEL_FILL = PatternFill(start_color="FCD5B4", end_color="FCD5B4", fill_type="solid")
+    LINE_COLOR  = "FFB7B7B7" 
+    THIN_EDGE   = Side(border_style='thin', color=LINE_COLOR)
+    HDR_FONT    = Font(bold=True)
+
+    def box_border(ws, cell_range, line_style="thin", color="FFB7B7B7"):
+        rows = list(ws[cell_range])
+        if not rows:
+            return
+        edge = Side(style=line_style, color=color)
+        max_y = len(rows) - 1
+        for y, row in enumerate(rows):
+            max_x = len(row) - 1
+            for x, cell in enumerate(row):
+                b = cell.border
+                cell.border = Border(
+                    left=edge if x == 0 else b.left,
+                    right=edge if x == max_x else b.right,
+                    top=edge if y == 0 else b.top,
+                    bottom=edge if y == max_y else b.bottom,
+                )
+
+    def header_cell(ws, addr: str, value: str):
+        ws[addr] = value
+        ws[addr].fill = PASTEL_FILL
+        ws[addr].font = HDR_FONT
+        ws[addr].alignment = Alignment(horizontal='center', vertical='center')
+
     wb = Workbook()
     if 'Sheet' in wb.sheetnames:
         wb.remove(wb['Sheet'])
-    ws = wb.create_sheet(title='상단부')
-    wsd = wb.create_sheet(title='하단부')
-    wsp = wb.create_sheet(title='특수지표')
 
+    ws   = wb.create_sheet(title='상단부')
+    wsd  = wb.create_sheet(title='하단부')
+    wsi  = wb.create_sheet(title='특수지표')
+    ws_raw = wb.create_sheet(title='반응별 정보')
+
+    ws.sheet_view.showGridLines = False
     ws.merge_cells('A4:B4'); ws.merge_cells('A14:B14'); ws.merge_cells('A20:D20')
     ws.merge_cells('F4:H4'); ws.merge_cells('G5:H5'); ws.merge_cells('J4:K4')
     ws.merge_cells('M4:N4'); ws.merge_cells('M16:P16')
-    wsd.merge_cells('A3:F3'); wsd.merge_cells('H3:I3'); wsd.merge_cells('K3:N3')
-    wsd.merge_cells('K5:L5'); wsd.merge_cells('K6:L6'); wsd.merge_cells('K7:L7')
-    wsd.merge_cells('K8:L8'); wsd.merge_cells('K9:L9'); wsd.merge_cells('K10:L10')
-    wsd.merge_cells('K11:L11'); wsd.merge_cells('K12:L12')
-    wsd.merge_cells('A14:D14'); wsd.merge_cells('F14:G14'); wsd.merge_cells('I14:J14'); wsd.merge_cells('L14:M14')
 
-    bckground_cells = ['A4', 'A14', 'A20', 'F4', 'F5', 'G5', 'J4', 'M4', 'M16']
-    for cell in bckground_cells:
-        ws[cell].fill = PatternFill(start_color="7B68EE", end_color="7B68EE", fill_type='solid')
-    bckground_cells2 = ['A3', 'H3', 'K3', 'A14', 'F14', 'I14', 'L14']
-    for cell in bckground_cells2:
-        wsd[cell].fill = PatternFill(start_color="7B68EE", end_color="7B68EE", fill_type='solid')
+    header_cell(ws, 'A4',  'Location Features')
+    header_cell(ws, 'A14', 'Developmental Quality')
+    header_cell(ws, 'A20', 'Form Quality')
+    header_cell(ws, 'F4',  'Determinants')
+    header_cell(ws, 'F5',  'Blends')
+    header_cell(ws, 'G5',  'Single')
+    header_cell(ws, 'J4',  'Contents')
+    header_cell(ws, 'M4',  'approach')
+    header_cell(ws, 'M16', 'Special Scores')
 
-    ws.sheet_view.showGridLines = False
-    wsd.sheet_view.showGridLines = False
+    for pos in [
+        'A4:B4','A5:B12','A14:B14','A15:B18','A20:D20','A21:D26',
+        'F4:H4','F5:F5','G5:H5','F6:F29','G6:H29','J4:K4','J5:K31',
+        'M4:N4','M5:N14','M16:P16','M17:P30'
+    ]:
+        box_border(ws, pos)
+    ws['A5']='Zf'; ws['A6']='Zsum'; ws['A7']='Zest'
+    ws['A9']='W'; ws['A10']='D'; ws['A11']='Dd'; ws['A12']='S'
+    ws['A15']='+'; ws['A16']='o'; ws['A17']='v/+'; ws['A18']='v'
+    ws['B21']='FQx'; ws['C21']='MQual'; ws['D21']='W+D'
+    ws['A22']='+'; ws['A23']='o'; ws['A24']='u'; ws['A25']='-'; ws['A26']='none'
 
-    BORDER_LIST = ['A5:B12', 'A4:B4', 'A14:B14', 'A15:B18', 'A20:D20', 'A21:D21', 'A22:D26', 'F4:H4', 'F5:F5', 'G5:H5',
-                   'F6:F29', 'G6:H29', 'J4:K4', 'J5:K31', 'M4:N4', 'M5:N14', 'M16:P16', 'M17:P17', 'M18:P25', 'M26:P30']
-    BORDER_LIST2 = ['A3:F3', 'A4:F4', 'A5:F7', 'A8:F9', 'H3:I3', 'H4:I10', 'K3:N3', 'K4:N12', 'A14:D14', 'A15:D19',
-                    'F14:G14', 'F15:G21', 'I14:J14', 'I15:J21', 'L14:M14', 'L15:M21']
-
-    def set_border(worksheet, cell_range):
-        rows = worksheet[cell_range]
-        side = Side(border_style='thin', color="FF000000")
-        rows = list(rows)
-        max_y = len(rows) - 1
-        for pos_y, cells in enumerate(rows):
-            max_x = len(cells) - 1
-            for pos_x, c in enumerate(cells):
-                border = Border(left=c.border.left, right=c.border.right, top=c.border.top, bottom=c.border.bottom)
-                if pos_x == 0: border.left = side
-                if pos_x == max_x: border.right = side
-                if pos_y == 0: border.top = side
-                if pos_y == max_y: border.bottom = side
-                if pos_x == 0 or pos_x == max_x or pos_y == 0 or pos_y == max_y:
-                    c.border = border
-
-    for pos in BORDER_LIST:  set_border(ws, pos)
-    for pos in BORDER_LIST2: set_border(wsd, pos)
-
-    ws['A4'] = 'Location Features'
-    ws['A5'] = 'Zf'; ws['A6'] = 'Zsum'; ws['A7'] = 'Zest'
-    ws['A9'] = 'W'; ws['A10'] = 'D'; ws['A11'] = 'Dd'; ws['A12'] = 'S'
-    ws['A14'] = 'Developmental Quality'
-    ws['A15'] = '+'; ws['A16'] = 'o'; ws['A17'] = 'v/+'; ws['A18'] = 'v'
-    ws['A20'] = 'Form Quality'
-    ws['B21'] = 'FQx'; ws['C21'] = 'MQual'; ws['D21'] = 'W+D'
-    ws['A22'] = '+'; ws['A23'] = 'o'; ws['A24'] = 'u'; ws['A25'] = '-'; ws['A26'] = 'none'
-
-    ws['F4'] = 'Determinants'
-    ws['F5'] = 'Blends'; ws['G5'] = 'Single'
-    fields = [
-        'M','FM','m',"FC","CF","C","Cn","FC'","C'F","C'",
-        'FT','TF','T','FV','VF','V','FY','YF','Y','Fr','rF','FD','F','(2)'
-    ]
-    real_field = [
-        'M','FM','m_l','FC','CF','C','Cn','FCa','CaF','Ca',
-        'FT','TF','T','FV','VF','V','FY','YF','Y','Fr','rF','FD','F','pair'
-    ]
-    s_row = 6
-    for field_name in fields:
-        ws.cell(row=s_row, column=7, value=field_name); s_row += 1
-
-    ws['J4'] = 'Contents'
-    cont_fields = [
-        'H','(H)','Hd','(Hd)','Hx','A','(A)','Ad','(Ad)','An',
-        'Art','Ay','Bl','Bt','Cg','Cl','Ex','Fd','Fi','Ge','Hh','Ls',
-        'Na','Sc','Sx','Xy','Id'
-    ]
-    cont_real_fields = [
-        'H','H_paren','Hd','Hd_paren','Hx','A','A_paren','Ad','Ad_paren','An',
-        'Art','Ay','Bl','Bt','Cg','Cl','Ex','Fd_l','Fi','Ge','Hh','Ls',
-        'Na','Sc','Sx','Xy','Idio'
-    ]
-    s_row = 5
-    for field_name in cont_fields:
-        ws.cell(row=s_row, column=10, value=field_name); s_row += 1
-
-    ws['M4'] = "approach"
-    for r, label in enumerate(['I','II','III','IV','V','VI','VII','VIII','IX','X'], start=5):
-        ws.cell(row=r, column=13, value=label)
-
-    ws['M16'] = 'Special Scores'
-    ws['N17'] = 'Lvl-1'; ws['O17'] = 'Lvl-2'
-    sp_real_fields = ['sp_dv','sp_inc','sp_dr','sp_fab','sp_alog','sp_con']
-    sp_real_fields2 = ['sp_dv2','sp_inc2','sp_dr2','sp_fab2']
-    s_row = 18
-    for field_name in ['DV','INC','DR','FAB','ALOG','CON']:
-        ws.cell(row=s_row, column=13, value=field_name); s_row += 1
-    ws['M24'] = 'Raw Sum6'; ws['M25'] = 'Weighted Sum6'
-    ws['M26'] = 'AB'; ws['M27'] = 'AG'; ws['M28'] = 'COP'; ws['M29'] = 'CP'
-    ws['O26'] = 'GHR'; ws['O27'] = 'PHR'; ws['O28'] = 'MOR'; ws['O29'] = 'PER'; ws['O30'] = 'PSV'
-
-    ws['B5'] = structural_summary.Zf
-    ws['B6'] = structural_summary.Zsum; ws['B6'].number_format = '0.0'
-    ws['B7'] = structural_summary.Zest; ws['B7'].number_format = '0.0'
-    ws['B9'] = structural_summary.W; ws['B10'] = structural_summary.D
-    ws['B11'] = structural_summary.Dd; ws['B12'] = structural_summary.S
+    ws['B5']  = structural_summary.Zf
+    ws['B6']  = structural_summary.Zsum; ws['B6'].number_format = '0.0'
+    ws['B7']  = structural_summary.Zest; ws['B7'].number_format = '0.0'
+    ws['B9']  = structural_summary.W;   ws['B10'] = structural_summary.D
+    ws['B11'] = structural_summary.Dd;  ws['B12'] = structural_summary.S
 
     ws['B15'] = structural_summary.dev_plus
     ws['B16'] = structural_summary.dev_o
@@ -593,350 +583,182 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     ws['B24'] = structural_summary.fqx_u
     ws['B25'] = structural_summary.fqx_minus
     ws['B26'] = structural_summary.fqx_none
+
     ws['C22'] = structural_summary.mq_plus
     ws['C23'] = structural_summary.mq_o
     ws['C24'] = structural_summary.mq_u
     ws['C25'] = structural_summary.mq_minus
     ws['C26'] = structural_summary.mq_none
+
     ws['D22'] = structural_summary.wd_plus
     ws['D23'] = structural_summary.wd_o
     ws['D24'] = structural_summary.wd_u
     ws['D25'] = structural_summary.wd_minus
     ws['D26'] = structural_summary.wd_none
 
-    blends = structural_summary.blends.split(',') if structural_summary.blends else []
-    start_row = 6
-    for blend in blends:
-        ws.cell(row=start_row, column=6, value=blend.strip()); start_row += 1
+    blends_str = getattr(structural_summary, 'blends', '') or ''
+    blends_list = [b.strip() for b in str(blends_str).split(',') if b.strip()]
 
-    row = 6
-    for field_name in real_field:
-        field_value = getattr(structural_summary, field_name)
-        ws.cell(row=row, column=8, value=field_value)
-        ws.cell(row=row, column=8).number_format = "#"
+    row = 6 
+    for b in blends_list:
+        ws.cell(row=row, column=6, value=b)  # column=6 → 'F'
         row += 1
+    
+    fields = ['M','FM','m',"FC","CF","C","Cn","FC'","C'F","C'",
+              'FT','TF','T','FV','VF','V','FY','YF','Y','Fr','rF','FD','F','(2)']
+    real_field = ['M','FM','m_l','FC','CF','C','Cn','FCa','CaF','Ca',
+                  'FT','TF','T','FV','VF','V','FY','YF','Y','Fr','rF','FD','F','pair']
+    r = 6
+    for name in fields:
+        ws.cell(row=r, column=7, value=name); r += 1
+    r = 6
+    for fname in real_field:
+        ws.cell(row=r, column=8, value=getattr(structural_summary, fname)); r += 1
 
-    row = 5
-    for field_name in cont_real_fields:
-        field_value = getattr(structural_summary, field_name)
-        ws.cell(row=row, column=11, value=field_value)
-        ws.cell(row=row, column=11).number_format = "#"
-        row += 1
+    cont_names = ['H','(H)','Hd','(Hd)','Hx','A','(A)','Ad','(Ad)','An',
+                  'Art','Ay','Bl','Bt','Cg','Cl','Ex','Fd','Fi','Ge','Hh','Ls',
+                  'Na','Sc','Sx','Xy','Id']
+    cont_real  = ['H','H_paren','Hd','Hd_paren','Hx','A','A_paren','Ad','Ad_paren','An',
+                  'Art','Ay','Bl','Bt','Cg','Cl','Ex','Fd_l','Fi','Ge','Hh','Ls',
+                  'Na','Sc','Sx','Xy','Idio']
+    r = 5
+    for name in cont_names:
+        ws.cell(row=r, column=10, value=name); r += 1
+    r = 5
+    for fname in cont_real:
+        ws.cell(row=r, column=11, value=getattr(structural_summary, fname)); r += 1
 
-    ws['N5']  = structural_summary.app_I
-    ws['N6']  = structural_summary.app_II
-    ws['N7']  = structural_summary.app_III
-    ws['N8']  = structural_summary.app_IV
-    ws['N9']  = structural_summary.app_V
-    ws['N10'] = structural_summary.app_VI
-    ws['N11'] = structural_summary.app_VII
-    ws['N12'] = structural_summary.app_VIII
-    ws['N13'] = structural_summary.app_IX
-    ws['N14'] = structural_summary.app_X
+    header_cell(ws, 'M4', 'approach')
+    for i, label in enumerate(['I','II','III','IV','V','VI','VII','VIII','IX','X'], start=5):
+        ws.cell(row=i, column=13, value=label)
+    ws['N5']=structural_summary.app_I;   ws['N6']=structural_summary.app_II
+    ws['N7']=structural_summary.app_III; ws['N8']=structural_summary.app_IV
+    ws['N9']=structural_summary.app_V;   ws['N10']=structural_summary.app_VI
+    ws['N11']=structural_summary.app_VII;ws['N12']=structural_summary.app_VIII
+    ws['N13']=structural_summary.app_IX; ws['N14']=structural_summary.app_X
 
-    lv1_row = 18
-    for field_name in sp_real_fields:
-        ws.cell(row=lv1_row, column=14, value=getattr(structural_summary, field_name)); lv1_row += 1
-    lv2_row = 18
-    for field_name in sp_real_fields2:
-        ws.cell(row=lv2_row, column=15, value=getattr(structural_summary, field_name)); lv2_row += 1
+    header_cell(ws, 'M16', 'Special Scores')
+    ws['N17']='Lvl-1' 
+    ws['O17']='Lvl-2'
+    for i, name in enumerate(['DV','INC','DR','FAB','ALOG','CON'], start=18):
+        ws.cell(row=i, column=13, value=name)  # M열 라벨
 
-    ws['N24'] = structural_summary.sum6
-    ws['N25'] = structural_summary.wsum6
-    ws['N26'] = structural_summary.sp_ab
-    ws['N27'] = structural_summary.sp_ag
-    ws['N28'] = structural_summary.sp_cop
-    ws['N29'] = structural_summary.sp_cp
-    ws['P26'] = structural_summary.sp_ghr
-    ws['P27'] = structural_summary.sp_phr
-    ws['P28'] = structural_summary.sp_mor
-    ws['P29'] = structural_summary.sp_per
-    ws['P30'] = structural_summary.sp_psv
+    for i, fn in enumerate(['sp_dv','sp_inc','sp_dr','sp_fab','sp_alog','sp_con'], start=18):
+        c = ws.cell(row=i, column=14, value=getattr(structural_summary, fn))  # N열 값
+        c.number_format = '0'
 
-    for column_cells in ws.columns:
-        length = max(len(str(cell.value)) * 1.1 for cell in column_cells)
-        ws.column_dimensions[column_cells[0].column_letter].width = length
+    for i, fn in enumerate(['sp_dv2','sp_inc2','sp_dr2','sp_fab2'], start=18):
+        c = ws.cell(row=i, column=15, value=getattr(structural_summary, fn))  # O열 값
+        c.number_format = '0'
+    ws['M24'] = 'Raw Sum6';      ws['N24'] = structural_summary.sum6
+    ws['M25'] = 'Weighted Sum6'; ws['N25'] = structural_summary.wsum6
+    ws['M26'] = 'AB';            ws['N26'] = structural_summary.sp_ab
+    ws['M27'] = 'AG';            ws['N27'] = structural_summary.sp_ag
+    ws['M28'] = 'COP';           ws['N28'] = structural_summary.sp_cop
+    ws['M29'] = 'CP';            ws['N29'] = structural_summary.sp_cp
+    for r in range(24, 30):
+        ws.cell(row=r, column=14).number_format = '0'  # N열 값 포맷
 
-    wsd['A3'] = 'Core'
-    wsd['A4'] = 'R'; wsd['C4'] = 'L'
-    wsd['A5'] = 'EB'; wsd['A6'] = 'eb'
-    wsd['C5'] = 'EA'; wsd['C6'] = 'es'; wsd['C7'] = 'Adj es'
-    wsd['E5'] = 'EBper'; wsd['E6'] = 'D'; wsd['E7'] = 'Adj D'
-    wsd['A8'] = 'FM'; wsd['A9'] = 'm'
-    wsd["C8"] = "SumC'"; wsd['C9'] = 'SumV'
-    wsd['E8'] = 'SumT'; wsd['E9'] = 'SumY'
+    ws['O26'] = 'GHR'; ws['P26'] = structural_summary.sp_ghr
+    ws['O27'] = 'PHR'; ws['P27'] = structural_summary.sp_phr
+    ws['O28'] = 'MOR'; ws['P28'] = structural_summary.sp_mor
+    ws['O29'] = 'PER'; ws['P29'] = structural_summary.sp_per
+    ws['O30'] = 'PSV'; ws['P30'] = structural_summary.sp_psv
+    for r in range(26, 31):
+        ws.cell(row=r, column=16).number_format = '0'  # P열 값 포맷
 
-    wsd['H3'] = 'Affect'
-    wsd['H4'] = 'FC:CF+C'; wsd['H5'] = 'Pure C'; wsd["H6"] = "SumC':WsumC"
-    wsd['H7'] = 'Afr'; wsd['H8'] = 'S'; wsd['H9'] = 'Blends:R'; wsd['H10'] = 'CP'
+    for col_cells in ws.columns:
+        length = max(len(str(c.value)) for c in col_cells)
+        ws.column_dimensions[col_cells[0].column_letter].width = max(8, min(32, int(length*1.2)))
 
-    wsd['K3'] = 'Interpersonal'
-    wsd['K4'] = 'COP'; wsd['M4'] = 'AG'
-    wsd['K5'] = 'GHR:PHR'; wsd['K6'] = 'a:p'; wsd['K7'] = 'Food'
-    wsd['K8'] = 'SumT'; wsd['K9'] = 'Human Content'; wsd['K10'] = 'Pure H'
-    wsd['K11'] = 'PER'; wsd['K12'] = 'Isolation Index'
+    wsd.sheet_view.showGridLines = False
+    wsd.merge_cells('A3:F3'); wsd.merge_cells('H3:I3'); wsd.merge_cells('K3:N3')
+    wsd.merge_cells('A14:D14'); wsd.merge_cells('F14:G14'); wsd.merge_cells('I14:J14'); wsd.merge_cells('L14:M14')
 
-    wsd['A14'] = 'Ideation'
-    wsd['A15'] = 'a:p'; wsd['A16'] = 'Ma:Mp'; wsd['A17'] = 'Intel(2AB+Art+Ay)'; wsd['A18'] = 'MOR'
-    wsd['C15'] = 'Sum6'; wsd['C16'] = 'Lvl-2'; wsd['C17'] = 'Wsum6'; wsd['C18'] = 'M-'; wsd['C19'] = 'M none'
+    header_cell(wsd, 'A3',  'Core')
+    header_cell(wsd, 'H3',  'Affect')
+    header_cell(wsd, 'K3',  'Interpersonal')
+    header_cell(wsd, 'A14', 'Ideation')
+    header_cell(wsd, 'F14', 'Mediation')
+    header_cell(wsd, 'I14', 'Processing')
+    header_cell(wsd, 'L14', 'Self')
 
-    wsd['F14'] = 'Mediation'
-    med_fields = ['XA%','WDA%','X-%','S-','P','X+%','Xu%']
-    med_real_fields = ['xa_per','wda_per','x_minus_per','s_minus','popular','x_plus_per','xu_per']
-    s_row = 15
-    for field_name in med_fields:
-        wsd.cell(row=s_row, column=6, value=field_name); s_row += 1
+    for pos in ['A3:F3','A4:F4','A5:F7','A8:F9','H3:I3','H4:I10','K3:N3','K4:N12',
+                'A14:D14','A15:D19','F14:G14','F15:G21','I14:J14','I15:J21','L14:M14','L15:M21']:
+        box_border(wsd, pos)
 
-    wsd['I14'] = 'Processing'
-    pro_fields = ['Zf','W:D:Dd','W:M','Zd','PSV','DQ+','DQv']
-    pro_real_fields = ['Zf','W_D_Dd','W_M','Zd','sp_psv','dev_plus','dev_v']
-    s_row = 15
-    for field_name in pro_fields:
-        wsd.cell(row=s_row, column=9, value=field_name); s_row += 1
+    wsd['A4']='R'; wsd['C4']='L'
+    wsd['A5']='EB'; wsd['A6']='eb'
+    wsd['C5']='EA'; wsd['C6']='es'; wsd['C7']='Adj es'
+    wsd['E5']='EBper'; wsd['E6']='D'; wsd['E7']='Adj D'
+    wsd['A8']='FM'; wsd['A9']='m'; wsd['C8']="SumC'"; wsd['C9']='SumV'
+    wsd['E8']='SumT'; wsd['E9']='SumY'
 
-    wsd['L14'] = 'Self'
-    self_fields = ['Ego[3r+(2)/R]','Fr+rF','SumV','FD','An+Xy','MOR','H:(H)+Hd+(Hd)']
-    self_real_fields = ['ego','fr_rf','sum_V','fdn','an_xy','sp_mor','h_prop']
-    s_row = 15
-    for field_name in self_fields:
-        wsd.cell(row=s_row, column=12, value=field_name); s_row += 1
+    wsd['B4']=structural_summary.R;         wsd['D4']=structural_summary.L
+    wsd['B5']=structural_summary.ErleBnistypus
+    wsd['B6']=structural_summary.eb
+    wsd['D5']=structural_summary.EA;        wsd['D6']=structural_summary.es; wsd['D7']=structural_summary.adj_es
+    wsd['F5']='NA' if structural_summary.EBper == 0 else structural_summary.EBper
+    wsd['F6']=structural_summary.D_score;   wsd['F7']=structural_summary.adj_D
+    wsd['B8']=structural_summary.sum_FM;    wsd['B9']=structural_summary.sum_m
+    wsd['D8']=structural_summary.sum_Ca;    wsd['D9']=structural_summary.sum_V
+    wsd['F8']=structural_summary.sum_T;     wsd['F9']=structural_summary.sum_Y
 
-    wsd['B4'] = structural_summary.R; wsd['D4'] = structural_summary.L
-    wsd['B5'] = structural_summary.ErleBnistypus
-    wsd['B6'] = structural_summary.eb
-    wsd['D5'] = structural_summary.EA
-    wsd['D6'] = structural_summary.es
-    wsd['D7'] = structural_summary.adj_es
-    wsd['F5'] = 'NA' if structural_summary.EBper == 0 else structural_summary.EBper
-    wsd['F6'] = structural_summary.D_score
-    wsd['F7'] = structural_summary.adj_D
-    wsd['B8'] = structural_summary.sum_FM
-    wsd['B9'] = structural_summary.sum_m
-    wsd['D8'] = structural_summary.sum_Ca
-    wsd['D9'] = structural_summary.sum_V
-    wsd['F8'] = structural_summary.sum_T
-    wsd['F9'] = structural_summary.sum_Y
+    wsd['H4']='FC:CF+C'; wsd['H5']='Pure C'; wsd['H6']="SumC':WsumC"
+    wsd['H7']='Afr';     wsd['H8']='S';       wsd['H9']='Blends:R'; wsd['H10']='CP'
+    wsd['I4']=structural_summary.f_c_prop;    wsd['I5']=structural_summary.pure_c
+    wsd['I6']=structural_summary.ca_c_prop;   wsd['I7']=structural_summary.afr; wsd['I7'].number_format="0.##;-0.##;0"
+    wsd['I8']=structural_summary.S;          wsd['I9']=structural_summary.blends_r
+    wsd['I10']=structural_summary.sp_cp
 
-    wsd['I4'] = structural_summary.f_c_prop; wsd['I4'].alignment = Alignment(horizontal='right')
-    wsd['I5'] = structural_summary.pure_c
-    wsd['I6'] = structural_summary.ca_c_prop; wsd['I6'].alignment = Alignment(horizontal='right')
-    wsd['I7'] = structural_summary.afr; wsd['I7'].number_format = "0.##;-0.##;0"
-    wsd['I8'] = structural_summary.S
-    wsd['I9'] = structural_summary.blends_r; wsd['I9'].alignment = Alignment(horizontal='right')
-    wsd['I10'] = structural_summary.sp_cp
+    wsd['K4']='COP'; wsd['M4']='AG'
+    wsd['K5']='GHR:PHR'; wsd['K6']='a:p'; wsd['K7']='Food'
+    wsd['K8']='SumT';    wsd['K9']='Human Content'; wsd['K10']='Pure H'
+    wsd['K11']='PER';    wsd['K12']='Isolation Index'
+    wsd['L4']=structural_summary.sp_cop;   wsd['N4']=structural_summary.sp_ag
+    wsd['M5']=structural_summary.GHR_PHR;  wsd['M6']=structural_summary.a_p
+    wsd['M7']=structural_summary.Fd_l;     wsd['M8']=structural_summary.sum_T
+    wsd['M9']=structural_summary.human_cont; wsd['M10']=structural_summary.H
+    wsd['M11']=structural_summary.sp_per;    wsd['M12']=structural_summary.Isol
 
-    wsd['L4'] = structural_summary.sp_cop
-    wsd['N4'] = structural_summary.sp_ag
-    wsd['M5'] = structural_summary.GHR_PHR; wsd['M5'].alignment = Alignment(horizontal='right')
-    wsd['M6'] = structural_summary.a_p; wsd['M6'].alignment = Alignment(horizontal='right')
-    wsd['M7'] = structural_summary.Fd_l
-    wsd['M8'] = structural_summary.sum_T
-    wsd['M9'] = structural_summary.human_cont
-    wsd['M10'] = structural_summary.H
-    wsd['M11'] = structural_summary.sp_per
-    wsd['M12'] = structural_summary.Isol
+    wsd['A15']='a:p'; wsd['A16']='Ma:Mp'; wsd['A17']='Intel(2AB+Art+Ay)'; wsd['A18']='MOR'
+    wsd['C15']='Sum6'; wsd['C16']='Lvl-2'; wsd['C17']='Wsum6'; wsd['C18']='M-'; wsd['C19']='M none'
+    wsd['B15']=structural_summary.a_p;   wsd['B16']=structural_summary.Ma_Mp
+    wsd['B17']=structural_summary.intel; wsd['B18']=structural_summary.sp_mor
+    wsd['D15']=structural_summary.sum6;  wsd['D16']=structural_summary.Lvl_2
+    wsd['D17']=structural_summary.wsum6; wsd['D18']=structural_summary.mq_minus; wsd['D19']=structural_summary.mq_none
 
-    wsd['B15'] = structural_summary.a_p; wsd['B15'].alignment = Alignment(horizontal='right')
-    wsd['B16'] = structural_summary.Ma_Mp; wsd['B16'].alignment = Alignment(horizontal='right')
-    wsd['B17'] = structural_summary.intel
-    wsd['B18'] = structural_summary.sp_mor
-    wsd['D15'] = structural_summary.sum6
-    wsd['D16'] = structural_summary.Lvl_2
-    wsd['D17'] = structural_summary.wsum6
-    wsd['D18'] = structural_summary.mq_minus
-    wsd['D19'] = structural_summary.mq_none
+    for i, (lbl, attr) in enumerate(
+        [('XA%','xa_per'),('WDA%','wda_per'),('X-%','x_minus_per'),('S-','s_minus'),
+         ('P','popular'),('X+%','x_plus_per'),('Xu%','xu_per')], start=15):
+        v = getattr(structural_summary, attr)
+        c = wsd.cell(row=i, column=7, value=v)
+        c.number_format = "0" if isinstance(v, int) else "0.00"
+    for i, attr in enumerate(['Zf','W_D_Dd','W_M','Zd','sp_psv','dev_plus','dev_v'], start=15):
+        wsd.cell(row=i, column=10, value=getattr(structural_summary, attr))
+    for i, attr in enumerate(['ego','fr_rf','sum_V','fdn','an_xy','sp_mor','h_prop'], start=15):
+        wsd.cell(row=i, column=13, value=getattr(structural_summary, attr))
 
-    row = 15
-    for field_name in med_real_fields:
-        val = getattr(structural_summary, field_name)
-        wsd.cell(row=row, column=7, value=val)
-        wsd.cell(row=row, column=7).number_format = "0" if isinstance(val, int) else "0.00"
-        row += 1
+    row0 = 22
+    def cb(txt, pos): return f"☑ {txt}" if pos else txt
+    pti_pos  = (structural_summary.sumPTI >= 3)
+    depi_pos = (structural_summary.sumDEPI >= 5)
+    cdi_pos  = (structural_summary.sumCDI  >= 4)
+    scon_pos = (structural_summary.sumSCON >= 8)
+    hvi_pos  = (structural_summary.sumHVI  >= 4) and bool(structural_summary.HVI_premise)
+    obs_pos  = bool(structural_summary.OBS_posi)
+    obs_score = sum(1 for ch in (structural_summary.OBS or '') if ch == 'o')
 
-    row = 15
-    for field_name in pro_real_fields:
-        wsd.cell(row=row, column=10, value=getattr(structural_summary, field_name))
-        wsd.cell(row=row, column=10).alignment = Alignment(horizontal='right')
-        row += 1
-
-    row = 15
-    for field_name in self_real_fields:
-        wsd.cell(row=row, column=13, value=getattr(structural_summary, field_name))
-        row += 1
-
-    wsd['A23'] = f"PTI={structural_summary.sumPTI}"
-    wsd['B23'] = "☑" if structural_summary.sumDEPI >= 5 else "☐"; wsd['B23'].alignment = Alignment(horizontal='right')
-    wsd['C23'] = f"DEPI={structural_summary.sumDEPI}"
-    wsd['D23'] = "☑" if structural_summary.sumCDI >= 4 else "☐"; wsd['D23'].alignment = Alignment(horizontal='right')
-    wsd['E23'] = f"CDI={structural_summary.sumCDI}"
-    wsd['F23'] = "☑" if structural_summary.sumSCON >= 8 else "☐"; wsd['F23'].alignment = Alignment(horizontal='right')
-    wsd['G23'] = f"S-CON={structural_summary.sumSCON}"
-    wsd['H23'] = "☑ HVI" if structural_summary.HVI_premise is True and structural_summary.sumHVI >= 4 else "☐ HVI"
-    wsd['H23'].alignment = Alignment(horizontal='right')
-    wsd['J23'] = "☑ OBS" if structural_summary.OBS_posi else "☐ OBS"; wsd['J23'].alignment = Alignment(horizontal='right')
-
-    for column_cells in wsd.columns:
-        length = max(len(str(cell.value)) * 1.1 for cell in column_cells)
-        wsd.column_dimensions[column_cells[0].column_letter].width = length
-
-    wsp['A1'] = "PTI"
-    wsp['A2'] = "XA%<.70 AND WDA%<.75"
-    wsp['A3'] = "X-%>0.29"
-    wsp['A4'] = "LVL2>2 AND FAB2>0"
-    wsp['A5'] = "R<17 AND Wsum6>12 OR R>16 AND Wsum6>17*"
-    wsp['A6'] = "M- > 1 OR X-% > 0.40"
-    wsp['A7'] = "TOTAL"
-    row = 2
-    for i in range(0, 5):
-        value = "✔" if structural_summary.PTI[i] == "o" else ''
-        wsp.cell(row=row, column=2, value=value); row += 1
-    wsp['B7'] = structural_summary.sumPTI
-
-    wsp['A9'] = "DEPI"
-    wsp['A10'] = "SumV>0 OR FD>2"
-    wsp['A11'] = "Col-shd blends>0 OR S>2"
-    wsp['A12'] = "ego sup AND Fr+rF=0 OR ego inf"
-    wsp['A13'] = "Afr<0.46 OR Blends<4"
-    wsp['A14'] = "SumShd>FM+m OR SumC'>2"
-    wsp['A15'] = "MOR>2 OR INTELL>3"
-    wsp['A16'] = "COP<2 OR ISOL>0.24"
-    wsp['A17'] = "TOTAL"
-    wsp['A18'] = "POSITIVE?"
-    row = 10
-    for i in range(0, 7):
-        value = "✔" if structural_summary.DEPI[i] == "o" else ''
-        wsp.cell(row=row, column=2, value=value); row += 1
-    wsp['B17'] = structural_summary.sumDEPI
-    wsp['B18'] = structural_summary.sumDEPI >= 5
-
-    wsp['A20'] = "CDI"
-    wsp['A21'] = "EA<6 OR Daj<0"
-    wsp['A22'] = "COP<2 AND AG<2"
-    wsp['A23'] = "WSumC<2.5 OR Afr<0.46"
-    wsp['A24'] = "p > a+1 OR pure H<2"
-    wsp['A25'] = "SumT>1 OR ISOL>0.24 OR Fd>0"
-    wsp['A26'] = "TOTAL"
-    wsp['A27'] = "POSITIVE?"
-    row = 21
-    for i in range(0, 5):
-        value = "✔" if structural_summary.CDI[i] == "o" else ''
-        wsp.cell(row=row, column=2, value=value); row += 1
-    wsp['B26'] = structural_summary.sumCDI
-    wsp['B27'] = structural_summary.sumCDI >= 4
-
-    wsp['D1'] = "S-CON"
-    wsp['D2'] = "SumV+FD>2"
-    wsp['D3'] = "col-shd blends>0"
-    wsp['D4'] = "ego <0.31 ou >0.44"
-    wsp['D5'] = "mor>3"
-    wsp['D6'] = "Zd>3.5 ou <-3.5"
-    wsp['D7'] = "es>EA"
-    wsp['D8'] = "CF+C>FC"
-    wsp['D9'] = "X+%<0.70"
-    wsp['D10'] = "S>3"
-    wsp['D11'] = "P<3 OU P>8"
-    wsp['D12'] = "PURE H<2"
-    wsp['D13'] = "R<17"
-    wsp['D14'] = 'TOTAL'
-    wsp['D15'] = 'POSITIVE?'
-    row = 2
-    for i in range(0, 12):
-        value = "✔" if structural_summary.SCON[i] == "o" else ''
-        wsp.cell(row=row, column=5, value=value); row += 1
-    wsp['E14'] = structural_summary.sumSCON
-    wsp['E15'] = structural_summary.sumSCON >= 8
-
-    wsp['D17'] = 'HVI'
-    wsp['D18'] = 'SumT = 0'
-    wsp['D19'] = "Zf>12"
-    wsp['D20'] = "Zd>3.5"
-    wsp['D21'] = "S>3"
-    wsp['D22'] = "H+(H)+Hd+(Hd)>6"
-    wsp['D23'] = "(H)+(A)+(Hd)+(Ad)>3"
-    wsp['D24'] = "H+A : 4:1"
-    wsp['D25'] = "Cg>3"
-    wsp['D26'] = 'TOTAL'
-    wsp['D27'] = 'POSITIVE?'
-    wsp['E18'] = structural_summary.HVI_premise
-    row = 19
-    for i in range(0, 7):
-        value = "✔" if structural_summary.HVI[i] == "o" else ''
-        wsp.cell(row=row, column=5, value=value); row += 1
-    wsp['E26'] = structural_summary.sumHVI
-    wsp['E27'] = (structural_summary.sumHVI >= 4) and bool(structural_summary.HVI_premise)
-
-    wsp['A29'] = 'OBS'
-    wsp['A30'] = 1; wsp['A31'] = 2; wsp['A32'] = 3; wsp['A33'] = 4; wsp['A34'] = 5
-    wsp['B30'] = "Dd>3"; wsp['B31'] = "Zf>12"; wsp['B32'] = "Zd>3.0"; wsp['B33'] = "P>7"; wsp['B34'] = "FQ+>1"
-    wsp['D30'] = "1-5 are true"
-    wsp['D31'] = "FQ+>3 AND 2 items 1-4"
-    wsp['D32'] = "X+%>0,89 et 3 items"
-    wsp['D33'] = "FQ+>3 et X+%>0,89"
-    wsp['D34'] = 'POSITIVE?'
-    row = 30
-    for i in range(0, 5):
-        value = "✔" if structural_summary.OBS[i] == "o" else ''
-        wsp.cell(row=row, column=3, value=value); row += 1
-    row = 30
-    for i in range(5, 9):
-        value = "✔" if structural_summary.OBS[i] == "o" else ''
-        wsp.cell(row=row, column=5, value=value); row += 1
-    wsp['E34'] = structural_summary.OBS_posi
-
-    for column_cells in wsp.columns:
-        length = max(len(str(cell.value)) * 1.1 for cell in column_cells)
-        wsp.column_dimensions[column_cells[0].column_letter].width = length
-
-    ws2 = wb.create_sheet(title="raw data")
-
-    def _card_num(rc):
-        try:
-            return int(normalize_card_to_num(rc.card))
-        except Exception:
-            return 999
-    def _n(rc):
-        return rc.response_num or 0
-
-    response_codes_sorted = sorted(response_codes, key=lambda rc: (_card_num(rc), _n(rc)))
-
-    response_code_data = []
-    for rc in response_codes_sorted:
-        response_code_data.append({
-            'Card': to_roman(rc.card),
-            'N': rc.response_num,
-            'time': rc.time,
-            'response': rc.response,
-            'V': rc.rotation,
-            'inquiry': rc.inquiry,
-            'Location': rc.location,
-            'loc_num': rc.loc_num,
-            'Dev Qual': rc.dev_qual,
-            'determinants': rc.determinants,
-            'Form Quality': rc.form_qual,
-            '(2)': rc.pair,
-            'Content': rc.content,
-            'P': rc.popular,
-            'Z': rc.Z,
-            'special': rc.special,
-            'comment': rc.comment
-        })
-    df_raw_for_sheet = pd.DataFrame(response_code_data)
-
-    for col_idx, col_name in enumerate(df_raw_for_sheet.columns, start=1):
-        cell = ws2.cell(row=1, column=col_idx, value=col_name)
-        cell.font = Font(bold=True)
-
-    for row_vals in df_raw_for_sheet.values.tolist():
-        ws2.append(row_vals)
-
-    ws2.freeze_panes = "A2"
-    ws2.auto_filter.ref = f"A1:{get_column_letter(ws2.max_column)}1"
-    for col in range(1, ws2.max_column + 1):
-        max_len = 0
-        for row in range(1, ws2.max_row + 1):
-            v = ws2.cell(row=row, column=col).value
-            max_len = max(max_len, len(str(v)) if v is not None else 0)
-        ws2.column_dimensions[get_column_letter(col)].width = max(8, min(60, int(max_len * 1.1)))
+    wsd.cell(row=row0, column=1,  value=cb(f"PTI={structural_summary.sumPTI}", pti_pos)).font = HDR_FONT
+    # wsd.cell(row=row0, column=5,  value=cb("HVI", hvi_pos)).font = HDR_FONT
+    hvi_cell = wsd.cell(row=row0, column=3, value=cb(f"HVI={structural_summary.sumHVI}", hvi_pos))
+    hvi_cell.font = HDR_FONT
+    wsd.cell(row=row0, column=6,  value=cb(f"DEPI={structural_summary.sumDEPI}", depi_pos)).font = HDR_FONT
+    wsd.cell(row=row0, column=9,  value=cb(f"OBS={obs_score}", obs_pos)).font = HDR_FONT
+    wsd.cell(row=row0, column=12, value=cb(f"CDI={structural_summary.sumCDI}", cdi_pos)).font = HDR_FONT
+    wsd.cell(row=row0, column=15, value=cb(f"S-CON={structural_summary.sumSCON}", scon_pos)).font = HDR_FONT
+    for col in (1,3,6,9,12,15):
+        wsd.cell(row=row0, column=col).alignment = Alignment(horizontal='center')
 
     try:
         df_raw = pd.DataFrame([{
@@ -948,201 +770,121 @@ def export_structural_summary_xlsx_advanced(request, client_id):
             '결정인': rc.determinants,
             '(2)': rc.pair,
             '내용인': rc.content,
-            '특수점수': rc.special,
+            '특수점수': (special := _normalize_special_tokens(rc.special or '')),
+            'Card': to_roman(rc.card),
+            'time': rc.time, 'V': rc.rotation, 'Location': rc.location, 'loc_num': rc.loc_num,
+            'Dev Qual': rc.dev_qual, 'Form Quality': rc.form_qual,
+            'P': rc.popular, 'Z': rc.Z,
         } for rc in response_codes])
 
-        columns_to_keep = ['ID','카드','N','반응','질문','결정인','(2)','내용인','특수점수']
-        df_selected = df_raw[columns_to_keep].copy()
-        df_processed = df_selected.apply(_apply_pair_into_determinants, axis=1).drop(columns=['(2)'])
+        df_proc = df_raw[['ID','카드','N','반응','질문','결정인','(2)','내용인','특수점수']].copy()
+        df_proc = df_proc.apply(_apply_pair_into_determinants, axis=1).drop(columns=['(2)'])
 
-        df_processed['RESPONSE_토큰'] = df_processed['반응'].apply(lambda x: list(set(tokenize_with_pos(x))))
-        df_processed['INQUIRY_토큰']  = df_processed['질문'].apply(lambda x: list(set(tokenize_with_pos(x))))
-
-        rsp_score = _read_json_df(
-            RESOURCE_DIR / RESOURCE_FILENAMES['response_score'],
-            required_cols=['카드','토큰','품사','점수']
-        )
-        inq_score = _read_json_df(
-            RESOURCE_DIR / RESOURCE_FILENAMES['inquiry_score'],
-            required_cols=['카드','토큰','품사','점수']
-        )
-        sym_score = _read_json_df(
-            RESOURCE_DIR / RESOURCE_FILENAMES['symbol_score'],
-            required_cols=['카드','채점영역','기호','점수']
-        )
-        sc_stats = _read_json_df(
-            RESOURCE_DIR / RESOURCE_FILENAMES['score_stats'],
-            required_cols=['카드','채점영역','mean','std']
-        )
-        idx_stats = _read_json_df(
-            RESOURCE_DIR / RESOURCE_FILENAMES['index_stats'],
-            required_cols=['카드','mean','std']
-        )
-
-        for _df in (rsp_score, inq_score, sym_score, sc_stats, idx_stats, df_processed):
+        # 리소스 읽기
+        rsp_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['response_score'],
+                                  required_cols=['카드','토큰','품사','점수'])
+        inq_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['inquiry_score'],
+                                  required_cols=['카드','토큰','품사','점수'])
+        sym_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['symbol_score'],
+                                  required_cols=['카드','채점영역','기호','점수'])
+        sc_stats  = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['score_stats'],
+                                  required_cols=['카드','채점영역','mean','std'])
+        idx_stats = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['index_stats'],
+                                  required_cols=['카드','mean','std'])
+        for _df in (rsp_score, inq_score, sym_score, sc_stats, idx_stats):
             _df['카드'] = _df['카드'].astype(str)
 
-        df_scored = df_processed.copy()
-        df_scored = _calculate_token_score(df_scored, rsp_score, 'RESPONSE_토큰', 'RESPONSE_점수')
-        df_scored = _calculate_token_score(df_scored, inq_score, 'INQUIRY_토큰',  'INQUIRY_점수')
-        df_scored = _apply_symbol_score(df_scored, sym_score)
+        # 토큰화
+        df_proc['RESPONSE_토큰'] = df_raw['반응'].apply(lambda x: list(set(tokenize_with_pos(x))))
+        df_proc['INQUIRY_토큰']  = df_raw['질문'].apply(lambda x: list(set(tokenize_with_pos(x))))
+
+        # 점수화
+        df_sc = _calculate_token_score(df_proc.copy(), rsp_score, 'RESPONSE_토큰', 'RESPONSE_점수')
+        df_sc = _calculate_token_score(df_sc,          inq_score,  'INQUIRY_토큰',  'INQUIRY_점수')
+        df_sc  = _apply_symbol_score(df_sc, sym_score)
 
         mean_df = sc_stats.pivot(index='카드', columns='채점영역', values='mean')
         std_df  = sc_stats.pivot(index='카드', columns='채점영역', values='std')
-
-        candidate_areas = ['RESPONSE_점수','INQUIRY_점수','결정인_점수','내용인_점수','특수점수_점수']
-        areas = [a for a in candidate_areas if a in df_scored.columns and a in mean_df.columns]
-
-        def _area_z(row, area):
-            card = str(row['카드'])
-            try:
-                m = float(mean_df.loc[card, area])
-                s = float(std_df.loc[card, area])
-                if s == 0:
-                    return np.nan
-                return (row[area] - m) / s
-            except Exception:
-                return np.nan
-
-        for area in areas:
-            df_scored[f"{area}_z"] = df_scored.apply(lambda r, a=area: _area_z(r, a), axis=1)
-
-        for col in ['결정인_점수_z','내용인_점수_z','특수점수_점수_z','INQUIRY_점수_z','RESPONSE_점수_z']:
-            if col not in df_scored.columns:
-                df_scored[col] = 0.0
+        for a in ['RESPONSE_점수','INQUIRY_점수','결정인_점수','내용인_점수','특수점수_점수']:
+            colz = f'{a}_z'
+            if a in df_sc.columns and a in mean_df.columns:
+                def _z(r, aa=a):
+                    c = str(r['카드'])
+                    try:
+                        m = float(mean_df.loc[c, aa]); s = float(std_df.loc[c, aa])
+                        return (r[aa]-m)/s if s else 0.0
+                    except Exception:
+                        return 0.0
+                df_sc[colz] = df_sc.apply(_z, axis=1)
             else:
-                df_scored[col] = df_scored[col].fillna(0.0)
-
+                df_sc[colz] = 0.0
         z_cols = ['결정인_점수_z','내용인_점수_z','특수점수_점수_z','INQUIRY_점수_z','RESPONSE_점수_z']
-        df_scored['투사지수_final'] = df_scored[z_cols].sum(axis=1)
+        df_sc['투사지수_final'] = df_sc[z_cols].sum(axis=1)
 
-        df_scored = df_scored.merge(idx_stats, on='카드', how='left')
-        df_scored['std'] = df_scored['std'].replace(0, np.nan)
-        df_scored['std'] = df_scored['std'].fillna(df_scored['std'].mean() if not pd.isna(df_scored['std'].mean()) else 1.0)
-        df_scored['mean'] = df_scored['mean'].fillna(0.0)
-        df_scored['투사지수_T'] = 50 + 10 * (df_scored['투사지수_final'] - df_scored['mean']) / df_scored['std']
-        df_scored = df_scored.drop(columns=['mean','std'])
+        # T변환
+        df_sc = df_sc.merge(idx_stats, on='카드', how='left')
+        df_sc['std']  = df_sc['std'].replace(0, np.nan).fillna(1.0)
+        df_sc['mean'] = df_sc['mean'].fillna(0.0)
+        df_sc['투사지수_T'] = 50 + 10*(df_sc['투사지수_final'] - df_sc['mean'])/df_sc['std']
+        df_sc = df_sc.drop(columns=['mean','std'])
 
-        df_card_avg = (df_scored
-                       .groupby(['ID','카드'], as_index=False)['투사지수_T']
-                       .mean()
-                       .rename(columns={'투사지수_T':'투사지수_카드별평균'}))
-        df_card_avg['카드'] = df_card_avg['카드'].astype(int)
-        df_card_avg = df_card_avg.sort_values(['ID','카드']).reset_index(drop=True)
+        # 카드별/전체 평균
+        df_card_avg = (df_sc.groupby(['ID','카드'], as_index=False)
+                          .agg(투사지수_T평균=('투사지수_T','mean')))
+        df_card_avg['카드'] = pd.to_numeric(df_card_avg['카드'], errors='coerce').fillna(0).astype(int)
+        df_card_avg = df_card_avg.sort_values(['ID','카드'])
+        overall_t = float(df_card_avg['투사지수_T평균'].mean()) if not df_card_avg.empty else float(df_sc['투사지수_T'].mean())
 
-        df_id_avg = (df_card_avg
-                     .groupby('ID', as_index=False)['투사지수_카드별평균']
-                     .mean()
-                     .rename(columns={'투사지수_카드별평균':'투사지수_전체평균'}))
+        row1 = row0 + 2
+        cell_tp = wsd.cell(row=row1, column=1, value='투사지표')
+        cell_tp.font = HDR_FONT
+        cell_tp.fill = PASTEL_FILL   # 헤더 색 채우기
+        c_avg = wsd.cell(row=row1, column=2, value=round(overall_t, 2)); c_avg.number_format = "0.00"
+        box_border(wsd, f"A{row1}:B{row1}")
+        
+        row2 = row1 + 2
+        # 헤더
+        wsd.merge_cells(start_row=row2, start_column=1, end_row=row2, end_column=2)
+        tcell = wsd.cell(row=row2, column=1, value='카드별 투사점수'); tcell.fill = PASTEL_FILL; tcell.font = HDR_FONT
+        tcell.alignment = Alignment(horizontal='center')
+        # 목록
+        r = row2 + 1
+        t_map = {int(k): float(v) for k, v in zip(df_card_avg['카드'], df_card_avg['투사지수_T평균'])}
+        for n in range(1, 11):
+            wsd.cell(row=r, column=1, value=to_roman(str(n)))
+            c = wsd.cell(row=r, column=2, value=None if t_map.get(n) is None else round(t_map.get(n), 2))
+            c.number_format = "0.00"; r += 1
+        box_border(wsd, f"A{row2}:B{r-1}")
+        df_sc = df_sc.drop(columns=['반응', '질문', '결정인', '내용인', '특수점수'], errors='ignore')
 
-        ws_proc = wb.create_sheet(title='processed')
-        cols_p = ['ID','카드','N','반응','질문','결정인','내용인','특수점수','RESPONSE_토큰','INQUIRY_토큰']
-        _df_p = df_scored.copy()
+        df_out = (df_sc.merge(
+                    df_raw[['카드','N','Card','time','반응','질문','V','Location','Dev Qual',
+                            'loc_num','결정인','Form Quality','내용인','P','Z','특수점수']],
+                    on=['카드','N'], how='left')
+                 )
+        df_out['카드'] = pd.to_numeric(df_out['카드'], errors='coerce').fillna(0).astype(int)
+        df_out = df_out.sort_values(['카드','N'], kind='mergesort')
 
-        def _serialize_tokens(toks):
-            if not toks:
-                return ''
-            out = []
-            for t in toks:
-                try:
-                    w, p = t
-                except Exception:
-                    continue
-                w = str(w).replace(';', '／')
-                p = str(p).replace(';', '／')
-                out.append(f"{w}/{p}")
-            return ';'.join(out)
+        cols = ['카드','Card','N','time','반응','질문','V','Location','Dev Qual','loc_num',
+                '결정인','Form Quality','내용인','P','Z','특수점수','투사지수_T']
+        for i, name in enumerate(cols, start=1):
+            c = ws_raw.cell(row=1, column=i, value=name)
+            c.font = HDR_FONT; c.fill = PASTEL_FILL
+            c.alignment = Alignment(horizontal='center', vertical='center')
+            c.border = Border(top=THIN_EDGE, bottom=THIN_EDGE, left=THIN_EDGE, right=THIN_EDGE)
 
-        _df_p['RESPONSE_토큰'] = _df_p['RESPONSE_토큰'].apply(_serialize_tokens)
-        _df_p['INQUIRY_토큰']  = _df_p['INQUIRY_토큰'].apply(_serialize_tokens)
-        _df_p = _df_p[cols_p].copy()
-        _df_p['카드'] = pd.to_numeric(_df_p['카드'], errors='coerce').fillna(0).astype(int)
-        _df_p['N'] = pd.to_numeric(_df_p['N'], errors='coerce')
-        _df_p = _df_p.sort_values(['카드','N'], kind='mergesort')
-        for i, c in enumerate(_df_p.columns, start=1):
-            cell = ws_proc.cell(row=1, column=i, value=c); cell.font = Font(bold=True)
-        for rowv in _df_p.values.tolist():
-            ws_proc.append(rowv)
-
-        ws_score = wb.create_sheet(title='score')
-        cols_s = [
-            'ID','카드','N',
-            'RESPONSE_점수','INQUIRY_점수','결정인_점수','내용인_점수','특수점수_점수',
-            'RESPONSE_점수_z','INQUIRY_점수_z','결정인_점수_z','내용인_점수_z','특수점수_점수_z',
-            '투사지수_final','투사지수_T'
-        ]
-        for need in ['RESPONSE_점수','INQUIRY_점수','결정인_점수','내용인_점수','특수점수_점수',
-                     'RESPONSE_점수_z','INQUIRY_점수_z','결정인_점수_z','내용인_점수_z','특수점수_점수_z']:
-            if need not in df_scored.columns:
-                df_scored[need] = 0.0
-        _df_s = df_scored[cols_s].copy()
-        _df_s['카드'] = pd.to_numeric(_df_s['카드'], errors='coerce').fillna(0).astype(int)
-        _df_s['N'] = pd.to_numeric(_df_s['N'], errors='coerce')
-        _df_s = _df_s.sort_values(['카드','N'], kind='mergesort')
-        for i, c in enumerate(_df_s.columns, start=1):
-            cell = ws_score.cell(row=1, column=i, value=c); cell.font = Font(bold=True)
-        for rowv in _df_s.values.tolist():
-            ws_score.append(rowv)
-
-        ws_card = wb.create_sheet(title='card_avg')
-        for i, c in enumerate(df_card_avg.columns, start=1):
-            cell = ws_card.cell(row=1, column=i, value=c); cell.font = Font(bold=True)
-        for rowv in df_card_avg.values.tolist():
-            ws_card.append(rowv)
-
-        ws_over = wb.create_sheet(title='overall')
-        for i, c in enumerate(df_id_avg.columns, start=1):
-            cell = ws_over.cell(row=1, column=i, value=c); cell.font = Font(bold=True)
-        for rowv in df_id_avg.values.tolist():
-            ws_over.append(rowv)
-
-        ws_raw = wb.create_sheet(title='rawdata')
-
-        def _card_num(rc):
-            try:
-                return int(normalize_card_to_num(rc.card))
-            except Exception:
-                return 999
-        def _n(rc): return rc.response_num or 0
-
-        response_codes_sorted = sorted(response_codes, key=lambda rc: (_card_num(rc), _n(rc)))
-        response_code_data = []
-        for rc in response_codes_sorted:
-            response_code_data.append({
-                'Card': to_roman(rc.card),
-                'N': rc.response_num,
-                'time': rc.time,
-                'response': rc.response,
-                'V': rc.rotation,
-                'inquiry': rc.inquiry,
-                'Location': rc.location,
-                'loc_num': rc.loc_num,
-                'Dev Qual': rc.dev_qual,
-                'determinants': rc.determinants,
-                'Form Quality': rc.form_qual,
-                '(2)': rc.pair,
-                'Content': rc.content,
-                'P': rc.popular,
-                'Z': rc.Z,
-                'special': rc.special,
-                'comment': rc.comment
-            })
-        df_raw_for_sheet = pd.DataFrame(response_code_data)
-
-        for col_idx, col_name in enumerate(df_raw_for_sheet.columns, start=1):
-            cell = ws_raw.cell(row=1, column=col_idx, value=col_name)
-            cell.font = Font(bold=True)
-        for row_vals in df_raw_for_sheet.values.tolist():
-            ws_raw.append(row_vals)
+        for rowv in df_out[cols].values.tolist():
+            ws_raw.append(rowv)
 
         ws_raw.freeze_panes = "A2"
         ws_raw.auto_filter.ref = f"A1:{get_column_letter(ws_raw.max_column)}1"
+
         for col in range(1, ws_raw.max_column + 1):
             max_len = 0
-            for row in range(1, ws_raw.max_row + 1):
-                v = ws_raw.cell(row=row, column=col).value
+            for r_ in range(1, ws_raw.max_row + 1):
+                v = ws_raw.cell(row=r_, column=col).value
                 max_len = max(max_len, len(str(v)) if v is not None else 0)
-            ws_raw.column_dimensions[get_column_letter(col)].width = max(8, min(60, int(max_len * 1.1)))
+            ws_raw.column_dimensions[get_column_letter(col)].width = max(8, min(80, int(max_len * 1.1)))
 
     except Exception as e:
         logging.exception("고급 산출 실패")
@@ -1151,15 +893,434 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         ws_err['A2'] = f"{type(e).__name__}: {str(e)}"
         ws_err.column_dimensions['A'].width = 120
 
+    header_cell(wsi, 'A1', "PTI"); header_cell(wsi, 'A9', "DEPI"); header_cell(wsi, 'A20', "CDI")
+    header_cell(wsi, 'D1', "S-CON"); header_cell(wsi, 'D17', "HVI"); header_cell(wsi, 'A29', "OBS")
+
+    wsi['A2']="XA%<.70 AND WDA%<.75"; wsi['A3']="X-%>0.29"; wsi['A4']="LVL2>2 AND FAB2>0"
+    wsi['A5']="R<17 AND Wsum6>12 OR R>16 AND Wsum6>17*"; wsi['A6']="M- > 1 OR X-% > 0.40"; wsi['A7']="TOTAL"
+    r = 2
+    for i in range(0,5):
+        wsi.cell(row=r, column=2, value=("✔" if structural_summary.PTI[i] == "o" else "")); r += 1
+    wsi['B7'] = structural_summary.sumPTI
+
+    wsi['A10']="SumV>0 OR FD>2"; wsi['A11']="Col-shd blends>0 OR S>2"
+    wsi['A12']="ego sup AND Fr+rF=0 OR ego inf"; wsi['A13']="Afr<0.46 OR Blends<4"
+    wsi['A14']="SumShd>FM+m OR SumC'>2"; wsi['A15']="MOR>2 OR INTELL>3"; wsi['A16']="COP<2 OR ISOL>0.24"
+    wsi['A17']="TOTAL"; wsi['A18']="POSITIVE?"
+    r = 10
+    for i in range(0,7):
+        wsi.cell(row=r, column=2, value=("✔" if structural_summary.DEPI[i] == "o" else "")); r += 1
+    wsi['B17']=structural_summary.sumDEPI; wsi['B18']=structural_summary.sumDEPI >= 5
+
+    wsi['A21']="EA<6 OR Daj<0"; wsi['A22']="COP<2 AND AG<2"; wsi['A23']="WSumC<2.5 OR Afr<0.46"
+    wsi['A24']="p > a+1 OR pure H<2"; wsi['A25']="SumT>1 OR ISOL>0.24 OR Fd>0"
+    wsi['A26']="TOTAL"; wsi['A27']="POSITIVE?"
+    r = 21
+    for i in range(0,5):
+        wsi.cell(row=r, column=2, value=("✔" if structural_summary.CDI[i] == "o" else "")); r += 1
+    wsi['B26']=structural_summary.sumCDI; wsi['B27']=structural_summary.sumCDI >= 4
+
+    labels = ["SumV+FD>2","col-shd blends>0","ego <0.31 ou >0.44","mor>3","Zd>3.5 ou <-3.5",
+              "es>EA","CF+C>FC","X+%<0.70","S>3","P<3 OU P>8","PURE H<2","R<17"]
+    for i, txt in enumerate(labels, start=2):
+        wsi.cell(row=i, column=4, value=txt)
+        wsi.cell(row=i, column=5, value=("✔" if structural_summary.SCON[i-2] == "o" else ""))
+    wsi['E14']=structural_summary.sumSCON; wsi['E15']=structural_summary.sumSCON >= 8
+
+    hvi_txt = ['SumT = 0','Zf>12','Zd>3.5','S>3','H+(H)+Hd+(Hd)>6','(H)+(A)+(Hd)+(Ad)>3','H+A : 4:1','Cg>3']
+    wsi['E18']=structural_summary.HVI_premise
+    for i, txt in enumerate(hvi_txt[1:], start=19):  # 19~25
+        wsi.cell(row=i, column=4, value=txt)
+        wsi.cell(row=i, column=5, value=("✔" if structural_summary.HVI[i-19] == "o" else ""))
+    wsi['E26']=structural_summary.sumHVI
+    wsi['E27']=(structural_summary.sumHVI >= 4) and bool(structural_summary.HVI_premise)
+
+    obs_l = [(1,"Dd>3"),(2,"Zf>12"),(3,"Zd>3.0"),(4,"P>7"),(5,"FQ+>1")]
+    for i,(n,txt) in enumerate(obs_l, start=30):
+        wsi.cell(row=i, column=1, value=n); wsi.cell(row=i, column=2, value=txt)
+        wsi.cell(row=i, column=3, value=("✔" if structural_summary.OBS[i-30] == "o" else ""))
+    obs2 = ["1-5 are true","FQ+>3 AND 2 items 1-4","X+%>0,89 et 3 items","FQ+>3 et X+%>0,89"]
+    for i, txt in enumerate(obs2, start=30):
+        wsi.cell(row=i, column=4, value=txt)
+        wsi.cell(row=i, column=5, value=("✔" if structural_summary.OBS[i+5-30] == "o" else ""))
+    wsi['E34']=structural_summary.OBS_posi
+
+    for col_cells in wsi.columns:
+        length = max(len(str(c.value)) for c in col_cells)
+        wsi.column_dimensions[col_cells[0].column_letter].width = max(8, min(40, int(length*1.2)))
+
+    col_shd_blends_total = _count_col_shd_blends(response_codes)
+    
+    wsdev = wb.create_sheet(title='이탈정도')
+    wsdev.sheet_view.showGridLines = False
+
+    TITLE = "규준자료 대비 지표별 백분위 이탈정도 계산파일(국제규준)"
+    wsdev.merge_cells('A1:H1')
+    title_cell = wsdev['A1']
+    title_cell.value = TITLE
+    title_cell.font = Font(bold=True, size=16)
+    title_cell.alignment = Alignment(horizontal='center', vertical='center')
+    wsdev.row_dimensions[1].height = 40
+
+    headers = ['No', '변인', '점수', '평균(국제)', '표준편차', 'Z', '%', '구분(국제)']
+    HDR_FILL = PatternFill(start_color="D8E4BC", end_color="D8E4BC", fill_type="solid")
+    for i, h in enumerate(headers, start=1):
+        c = wsdev.cell(row=2, column=i, value=h)
+        c.font = HDR_FONT
+        c.fill = HDR_FILL
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        c.border = Border(top=THIN_EDGE, bottom=THIN_EDGE, left=THIN_EDGE, right=THIN_EDGE)
+
+    def _safe_get(obj, name, default=0.0):
+        try:
+            v = getattr(obj, name)
+        except Exception:
+            return default
+        return default if v is None else v
+
+    def _norm_cdf(z: float) -> float:
+        return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+    def _parse_ratio_pair(text):
+        s = str(text or '').strip()
+        try:
+            a, b = s.split(':', 1)
+            a = float(a.strip() or 0)
+            b = float(b.strip() or 0)
+            return a, b
+        except Exception:
+            try:
+                x = float(s)
+                return x, 1.0
+            except Exception:
+                return 0.0, 0.0
+
+    CAT_COLOR = {
+        '매우낮음': '92CDDC',
+        '낮음'   : 'B7DEE8',
+        '평균하' : 'DAEEF3',
+        '평균'   : 'E4DFEC',
+        '평균상' : 'F2DCDB',
+        '높음'   : 'E6B8B7',
+        '매우높음': 'DA9694',
+    }
+    def _grade_label(p: float):
+        if p < 0.05:  return '매우낮음'
+        if p < 0.12:  return '낮음'
+        if p < 0.25:  return '평균하'
+        if p < 0.75:  return '평균'
+        if p < 0.88:  return '평균상'
+        if p < 0.95:  return '높음'
+        return '매우높음'
+
+    def _get_active(ss):
+        a, p = _parse_ratio_pair(_safe_get(ss, 'a_p', '0:0'))
+        return a
+    def _get_passive(ss):
+        a, p = _parse_ratio_pair(_safe_get(ss, 'a_p', '0:0'))
+        return p
+    def _get_ma(ss):
+        a, b = _parse_ratio_pair(_safe_get(ss, 'Ma_Mp', '0:0'))
+        return a
+    def _get_mp(ss):
+        a, b = _parse_ratio_pair(_safe_get(ss, 'Ma_Mp', '0:0'))
+        return b
+    def _get_sumc(ss):
+        return float(_safe_get(ss, 'FC', 0)) + float(_safe_get(ss, 'CF', 0)) + float(_safe_get(ss, 'C', 0)) + float(_safe_get(ss, 'Cn', 0))
+    def _get_wsumc(ss):
+        v = getattr(ss, 'WsumC', None)
+        if v is None:
+            v = _safe_get(ss, 'sum_Ca', 0)
+        return float(v)
+    def _get_sumc_prime(ss):
+        return float(_safe_get(ss, 'sum_Ca', 0))
+    def _get_sumsh(ss):
+        return float(_get_sumc_prime(ss)) + float(_safe_get(ss, 'sum_T', 0)) + float(_safe_get(ss, 'sum_V', 0)) + float(_safe_get(ss, 'sum_Y', 0))
+    def _get_blends_count(ss):
+        v = getattr(ss, 'blends_r', None)
+        if v is None:
+            return float(getattr(ss, 'blends', 0) or 0)
+        a, b = _parse_ratio_pair(v)
+        return a
+    def _get_blends_ratio(ss):
+        v = getattr(ss, 'blends_r', None)
+        a, b = _parse_ratio_pair(v)
+        return (a / b) if b else 0.0
+    def _get_human_all(ss):
+        return float(_safe_get(ss, 'human_cont', 0))
+
+    GET = {
+        'R':        lambda ss: _safe_get(ss, 'R', 0),
+        'W':        lambda ss: _safe_get(ss, 'W', 0),
+        'D':        lambda ss: _safe_get(ss, 'D', 0),
+        'Dd':       lambda ss: _safe_get(ss, 'Dd', 0),
+        'S':        lambda ss: _safe_get(ss, 'S', 0),
+
+        'DQ+':      lambda ss: _safe_get(ss, 'dev_plus', 0),
+        'DQo':      lambda ss: _safe_get(ss, 'dev_o', 0),
+        'DQv':      lambda ss: _safe_get(ss, 'dev_v', 0),
+        'DQv/+':    lambda ss: _safe_get(ss, 'dev_vplus', 0),
+
+        'FQ+':      lambda ss: _safe_get(ss, 'fqx_plus', 0),
+        'FQo':      lambda ss: _safe_get(ss, 'fqx_o', 0),
+        'FQu':      lambda ss: _safe_get(ss, 'fqx_u', 0),
+        'FQ-':      lambda ss: _safe_get(ss, 'fqx_minus', 0),
+        'FQnone':   lambda ss: _safe_get(ss, 'fqx_none', 0),
+
+        'MQ+':      lambda ss: _safe_get(ss, 'mq_plus', 0),
+        'Mqo':      lambda ss: _safe_get(ss, 'mq_o', 0),
+        'Mqu':      lambda ss: _safe_get(ss, 'mq_u', 0),
+        'MQ-':      lambda ss: _safe_get(ss, 'mq_minus', 0),
+        'Mqnone':   lambda ss: _safe_get(ss, 'mq_none', 0),
+
+        'S-':       lambda ss: _safe_get(ss, 's_minus', 0),
+
+        'M':        lambda ss: _safe_get(ss, 'M', 0),
+        'FM':       lambda ss: _safe_get(ss, 'sum_FM', _safe_get(ss, 'FM', 0)),
+        'm':        lambda ss: _safe_get(ss, 'sum_m', 0),
+        'FM+m':     lambda ss: _safe_get(ss, 'sum_FM', _safe_get(ss, 'FM', 0)) + _safe_get(ss, 'sum_m', 0),
+
+        'FC':       lambda ss: _safe_get(ss, 'FC', 0),
+        'CF':       lambda ss: _safe_get(ss, 'CF', 0),
+        'C':        lambda ss: _safe_get(ss, 'C', 0),
+        'Cn':       lambda ss: _safe_get(ss, 'Cn', 0),
+
+        'SumC':     _get_sumc,
+        'WSumC':    _get_wsumc,
+        "SumC'":    _get_sumc_prime,
+        'SumT':     lambda ss: _safe_get(ss, 'sum_T', 0),
+        'SumV':     lambda ss: _safe_get(ss, 'sum_V', 0),
+        'SumY':     lambda ss: _safe_get(ss, 'sum_Y', 0),
+        'SumSh':    _get_sumsh,
+
+        'Fr+rF':    lambda ss: _safe_get(ss, 'fr_rf', 0),
+        'FD':       lambda ss: _safe_get(ss, 'FD', 0),
+
+        'F':        lambda ss: _safe_get(ss, 'F', 0),
+        '2':        lambda ss: _safe_get(ss, 'pair', 0),
+
+        '3r+2/R':   lambda ss: _safe_get(ss, 'ego', 0),
+        'Lambda':   lambda ss: _safe_get(ss, 'Lambda', 0),
+        'EA':       lambda ss: _safe_get(ss, 'EA', 0),
+        'es':       lambda ss: _safe_get(ss, 'es', 0),
+        'D score':  lambda ss: _safe_get(ss, 'D_score', 0),
+        'Adj D':    lambda ss: _safe_get(ss, 'adj_D', 0),
+
+        'active':   _get_active,
+        'passive':  _get_passive,
+        'Ma':       _get_ma,
+        'Mp':       _get_mp,
+        'Intellect':lambda ss: _safe_get(ss, 'intel', 0),
+
+        'Zf':       lambda ss: _safe_get(ss, 'Zf', 0),
+        'Zd':       lambda ss: _safe_get(ss, 'Zd', 0),
+
+        'Blends':   _get_blends_count,
+        'Blends/R': _get_blends_ratio,
+        'Col-Shd Blends': lambda ss, v=col_shd_blends_total: v,
+
+        'Afr':      lambda ss: _safe_get(ss, 'afr', 0),
+
+        'Popular':  lambda ss: _safe_get(ss, 'popular', 0),
+        'XA%':      lambda ss: _safe_get(ss, 'xa_per', 0.0),
+        'WDA%':     lambda ss: _safe_get(ss, 'wda_per', 0.0),
+        'X+%':      lambda ss: _safe_get(ss, 'x_plus_per', 0.0),
+        'X-%':      lambda ss: _safe_get(ss, 'x_minus_per', 0.0),
+        'Xu%':      lambda ss: _safe_get(ss, 'xu_per', 0.0),
+
+        'Isolate/R':lambda ss: _safe_get(ss, 'Isol', 0),
+
+        'H':        lambda ss: _safe_get(ss, 'H', 0),
+        '(H)':      lambda ss: _safe_get(ss, 'H_paren', 0),
+        'Hd':       lambda ss: _safe_get(ss, 'Hd', 0),
+        '(Hd)':     lambda ss: _safe_get(ss, 'Hd_paren', 0),
+        'Hx':       lambda ss: _safe_get(ss, 'Hx', 0),
+        'All H cont': _get_human_all,
+        'A':        lambda ss: _safe_get(ss, 'A', 0),
+        '(A)':      lambda ss: _safe_get(ss, 'A_paren', 0),
+        'Ad':       lambda ss: _safe_get(ss, 'Ad', 0),
+        '(Ad)':     lambda ss: _safe_get(ss, 'Ad_paren', 0),
+        'An':       lambda ss: _safe_get(ss, 'An', 0),
+        'Art':      lambda ss: _safe_get(ss, 'Art', 0),
+        'Ay':       lambda ss: _safe_get(ss, 'Ay', 0),
+        'Bl':       lambda ss: _safe_get(ss, 'Bl', 0),
+        'Bt':       lambda ss: _safe_get(ss, 'Bt', 0),
+        'Cg':       lambda ss: _safe_get(ss, 'Cg', 0),
+        'Cl':       lambda ss: _safe_get(ss, 'Cl', 0),
+        'Ex':       lambda ss: _safe_get(ss, 'Ex', 0),
+        'Fi':       lambda ss: _safe_get(ss, 'Fi', 0),
+        'Fd':       lambda ss: _safe_get(ss, 'Fd_l', 0),
+        'Ge':       lambda ss: _safe_get(ss, 'Ge', 0),
+        'Hh':       lambda ss: _safe_get(ss, 'Hh', 0),
+        'Ls':       lambda ss: _safe_get(ss, 'Ls', 0),
+        'Na':       lambda ss: _safe_get(ss, 'Na', 0),
+        'Sc':       lambda ss: _safe_get(ss, 'Sc', 0),
+        'Sx':       lambda ss: _safe_get(ss, 'Sx', 0),
+        'Xy':       lambda ss: _safe_get(ss, 'Xy', 0),
+        'Id':       lambda ss: _safe_get(ss, 'Idio', 0),
+
+        'DV':       lambda ss: _safe_get(ss, 'sp_dv', 0),
+        'INC':      lambda ss: _safe_get(ss, 'sp_inc', 0),
+        'DR':       lambda ss: _safe_get(ss, 'sp_dr', 0),
+        'FAB':      lambda ss: _safe_get(ss, 'sp_fab', 0),
+        'DV2':      lambda ss: _safe_get(ss, 'sp_dv2', 0),
+        'INC2':     lambda ss: _safe_get(ss, 'sp_inc2', 0),
+        'DR2':      lambda ss: _safe_get(ss, 'sp_dr2', 0),
+        'FAB2':     lambda ss: _safe_get(ss, 'sp_fab2', 0),
+        'ALOG':     lambda ss: _safe_get(ss, 'sp_alog', 0),
+        'CONTAM':   lambda ss: _safe_get(ss, 'sp_con', 0),
+
+        'Sum6':     lambda ss: _safe_get(ss, 'sum6', 0),
+        'Lvl 2 Sp Sc': lambda ss: _safe_get(ss, 'Lvl_2', 0),
+        'Wsum6':    lambda ss: _safe_get(ss, 'wsum6', 0),
+        'AB':       lambda ss: _safe_get(ss, 'sp_ab', 0),
+        'AG':       lambda ss: _safe_get(ss, 'sp_ag', 0),
+        'COP':      lambda ss: _safe_get(ss, 'sp_cop', 0),
+        'CP':       lambda ss: _safe_get(ss, 'sp_cp', 0),
+        'GHR':      lambda ss: _safe_get(ss, 'sp_ghr', 0),
+        'PHR':      lambda ss: _safe_get(ss, 'sp_phr', 0),
+        'MOR':      lambda ss: _safe_get(ss, 'sp_mor', 0),
+        'PER':      lambda ss: _safe_get(ss, 'sp_per', 0),
+        'PSV':      lambda ss: _safe_get(ss, 'sp_psv', 0),
+    }
+
+    NORM_SPECS = [
+        ('R', 22.31, 7.90), ('W', 9.08, 4.54), ('D', 9.89, 5.81), ('Dd', 3.33, 3.37),
+        ('S', 2.49, 2.15),
+        ('DQ+', 6.24, 3.54), ('DQo', 14.68, 6.74), ('DQv', 1.09, 1.50), ('DQv/+', 0.29, 0.67),
+        ('FQ+', 0.21, 0.68), ('FQo', 11.11, 3.74), ('FQu', 6.20, 3.93), ('FQ-', 4.43, 3.23), ('FQnone', 0.33, 0.71),
+        ('MQ+', 0.12, 0.43), ('Mqo', 2.26, 1.66), ('Mqu', 0.69, 0.99), ('MQ-', 0.63, 1.05), ('Mqnone', 0.03, 0.20),
+        ('S-', 0.87, 1.15),
+
+        ('M', 3.73, 2.66), ('FM', 3.37, 2.18), ('m', 1.50, 1.54), ('FM+m', 4.87, 2.89),
+        ('FC', 1.91, 1.70), ('CF', 1.65, 1.55), ('C', 0.34, 0.66), ('Cn', 0.02, 0.14),
+        ('SumC', 3.91, 2.53), ('WSumC', 3.11, 2.17), ("SumC'", 1.75, 1.71),
+        ('SumT', 0.65, 0.91), ('SumV', 0.52, 0.92), ('SumY', 1.34, 1.63), ('SumSh', 4.29, 3.48),
+
+        ('Fr+rF', 0.41, 0.88), ('FD', 1.02, 1.19), ('F', 8.92, 5.34), ('2', 7.04, 3.83),
+        ('3r+2/R', 0.38, 0.16), ('Lambda', 0.86, 0.95), ('EA', 6.84, 3.76), ('es', 9.09, 5.04),
+        ('D score', -0.68, 1.48), ('Adj D', -0.20, 1.23),
+
+        ('active', 4.96, 3.08), ('passive', 3.73, 2.65), ('Ma', 2.09, 1.83), ('Mp', 1.67, 1.61),
+        ('Intellect', 2.35, 2.57),
+
+        ('Zf', 12.50, 4.92), ('Zd', -0.67, 4.72),
+
+        ('Blends', 4.01, 2.97), ('Blends/R', 0.18, 0.13), ('Col-Shd Blends', 0.60, 0.92),
+        ('Afr', 0.53, 0.20),
+
+        ('Popular', 5.36, 1.84), ('XA%', 0.79, 0.11), ('WDA%', 0.82, 0.11), ('X+%', 0.52, 0.13), ('X-%', 0.19, 0.11), ('Xu%', 0.27, 0.11),
+        ('Isolate/R', 0.20, 0.14),
+
+        ('H', 2.43, 1.89), ('(H)', 1.22, 1.24), ('Hd', 1.52, 1.71), ('(Hd)', 0.64, 0.92), ('Hx', 0.41, 0.98),
+        ('All H cont', 5.83, 3.51), ('A', 7.71, 3.18), ('(A)', 0.42, 0.73), ('Ad', 2.41, 1.97), ('(Ad)', 0.16, 0.45),
+        ('An', 1.16, 1.42), ('Art', 1.22, 1.45), ('Ay', 0.52, 0.87), ('Bl', 0.25, 0.55), ('Bt', 1.41, 1.44),
+        ('Cg', 1.89, 1.77), ('Cl', 0.18, 0.46), ('Ex', 0.19, 0.48), ('Fi', 0.50, 0.80), ('Fd', 1.02, 1.19),
+        ('Ge', 0.26, 0.62), ('Hh', 0.84, 1.03), ('Ls', 0.87, 1.12), ('Na', 0.75, 1.11), ('Sc', 1.11, 1.35),
+        ('Sx', 0.47, 0.94), ('Xy', 0.19, 0.52), ('Id', 0.89, 1.21),
+
+        ('DV', 0.65, 0.99), ('INC', 0.73, 0.97), ('DR', 0.49, 0.96), ('FAB', 0.45, 0.76),
+        ('DV2', 0.01, 0.14), ('INC2', 0.10, 0.33), ('DR2', 0.06, 0.31), ('FAB2', 0.08, 0.31),
+        ('ALOG', 0.16, 0.46), ('CONTAM', 0.02, 0.13),
+
+        ('Sum6', 2.75, 2.39), ('Lvl 2 Sp Sc', 0.25, 0.62), ('Wsum6', 7.63, 7.75),
+        ('AB', 0.32, 0.82), ('AG', 0.54, 0.86), ('COP', 1.07, 1.18), ('CP', 0.02, 0.15),
+        ('GHR', 3.70, 2.18), ('PHR', 2.86, 2.52), ('MOR', 1.26, 1.43), ('PER', 0.75, 1.12), ('PSV', 0.23, 0.56),
+    ]
+
+    r = 3
+    for idx, (name, mean, std) in enumerate(NORM_SPECS, start=1):
+        getter = GET.get(name, lambda ss: None)
+        score = getter(structural_summary)
+        try:
+            score = float(score)
+        except Exception:
+            score = None
+
+        if (score is None) or (std is None) or (float(std) == 0):
+            z = None
+            p = None
+        else:
+            z = (score - float(mean)) / float(std)
+            p = _norm_cdf(z)
+
+        wsdev.cell(row=r, column=1, value=idx)             # No
+        wsdev.cell(row=r, column=2, value=name)            # 변인
+        wsdev.cell(row=r, column=3, value=score)           # 점수
+        wsdev.cell(row=r, column=4, value=float(mean))     # 평균(국제)
+        wsdev.cell(row=r, column=5, value=float(std))      # 표준편차
+        wsdev.cell(row=r, column=6, value=(0.0 if z is None else z))  # Z
+        pct_cell = wsdev.cell(row=r, column=7, value=(0.0 if p is None else p))  # %
+        grade_cell = wsdev.cell(row=r, column=8)
+
+        DEC2_KEYS = {"Blends/R", "Afr", "XA%", "WDA%", "X+%", "X-%", "Xu%", "Isolate/R"}
+        if score is None:
+            wsdev.cell(row=r, column=3).number_format = '@'
+        else:
+            if name in DEC2_KEYS:
+                wsdev.cell(row=r, column=3, value=round(score, 2)).number_format = '0.00'
+            else:
+                wsdev.cell(row=r, column=3, value=int(round(score))).number_format = '0'
+
+        wsdev.cell(row=r, column=4).number_format = '0.00'
+        wsdev.cell(row=r, column=5).number_format = '0.00'
+        wsdev.cell(row=r, column=6).number_format = '0.00'
+        pct_cell.number_format = '0.0%'
+
+        if p is not None:
+            label = _grade_label(p)
+            grade_cell.value = label
+            color = CAT_COLOR.get(label)
+            if color:
+                grade_cell.fill = PatternFill(start_color=color, end_color=color, fill_type='solid')
+
+        r += 1
+
+    last_row = wsdev.max_row
+
+    IDX_FILL  = PatternFill(start_color="EEECE1", end_color="EEECE1", fill_type="solid")  # A열
+    META_FILL = PatternFill(start_color="FDE9D9", end_color="FDE9D9", fill_type="solid")  # B,D,E,F,G
+    POINT_FILL= PatternFill(start_color="FABF8F", end_color="FABF8F", fill_type="solid")  # C열
+
+    for rr in range(3, last_row + 1):
+        wsdev.cell(row=rr, column=1).fill = IDX_FILL
+        for cc in (2, 4, 5, 6, 7):
+            wsdev.cell(row=rr, column=cc).fill = META_FILL
+        wsdev.cell(row=rr, column=3).fill = POINT_FILL
+
+    for rr in range(2, last_row + 1):
+        for cc in range(1, 9):
+            cell = wsdev.cell(row=rr, column=cc)
+            cell.border = Border(left=THIN_EDGE, right=THIN_EDGE, top=THIN_EDGE, bottom=THIN_EDGE)
+            if rr >= 3 and cc in (1, 3, 4, 5, 6, 7):
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            elif rr >= 3 and cc == 2:
+                cell.alignment = Alignment(horizontal='left', vertical='center')
+            else:
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    widths = [6, 14, 9, 12, 10, 7, 8, 12]  # A~H
+    for i, w in enumerate(widths, start=1):
+        wsdev.column_dimensions[get_column_letter(i)].width = w
+
+    wsdev.auto_filter.ref = f"A2:H{last_row}"
+    wsdev.freeze_panes = "A3"
+
     output = BytesIO()
     wb.save(output)
     output.seek(0)
+    safe_name = f"{client.name}_{client.testDate:%Y-%m-%d}.xlsx"
+    fallback  = f"{slugify(client.name)}_{client.testDate:%Y-%m-%d}.xlsx"
+
     response = HttpResponse(
         output.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    response['Content-Disposition'] = 'attachment; filename=structural_summary_advanced.xlsx'
+    response['Content-Disposition'] = (
+        f'attachment; filename="{fallback}"; filename*=UTF-8\'\'{quote(safe_name)}'
+    )
     return response
+
 
 @group_min_required('advanced')
 def advanced_edit_responses(request, client_id):
