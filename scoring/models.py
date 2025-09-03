@@ -66,11 +66,50 @@ class Client(models.Model):
         ('F', '여성'),
         ('O', '기타'),
     )
+    RORSCHACH_HISTORY_CHOICES = (
+        ('0', '0회'),
+        ('1', '1회'),
+        ('2', '2회'),
+        ('3+', '3회 이상'),
+    )
+    TREATMENT_NOW_CHOICES = (
+        ('none', '없음'),
+        ('treat', '치료중'),
+    )
+    TREATMENT_PAST_CHOICES = (
+        ('none', '없음'),
+        ('yes', '치료받은 적 있음'),
+    )
     tester = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='검사자')
+    examiner_name = models.CharField(max_length=255, verbose_name='검사자 이름(실명)', blank=True, default="")
+    
     name = models.CharField(max_length=255, verbose_name='이름')
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, verbose_name='성별')
-    birthdate = models.DateField(verbose_name='생년월일', help_text="YYYY-DD-MM 형식으로 입력(예: 2000-08-01)")
-    testDate = models.DateField(verbose_name='검사일', help_text="YYYY-DD-MM 형식으로 입력(예: 2023-05-01)")
+    
+    birthdate = models.DateField(verbose_name='생년월일', help_text="YYYY-MM-DD 형식으로 입력(예: 2000-08-01)")
+    testDate = models.DateField(verbose_name='검사일', help_text="YYYY-MM-DD 형식으로 입력(예: 2023-05-01)")
+    
+    evaluation_purpose = models.CharField(max_length=255, verbose_name='평가 목적', blank=True, default="")
+
+    rorschach_history = models.CharField(
+        max_length=3, choices=RORSCHACH_HISTORY_CHOICES, verbose_name='로르샤흐 검사 수검 이력',
+        default='0'
+    )
+    current_psych_treatment = models.CharField(
+        max_length=10, choices=TREATMENT_NOW_CHOICES, verbose_name='현재 정신과 치료 유무',
+        default='none'
+    )
+    current_psych_dx = models.CharField(
+        max_length=255, verbose_name='현재 치료 관련 진단명', blank=True, default=""
+    )
+
+    past_psych_treatment = models.CharField(
+        max_length=10, choices=TREATMENT_PAST_CHOICES, verbose_name='과거 정신과 치료 유무',
+        default='none'
+    )
+    past_psych_dx = models.CharField(
+        max_length=255, verbose_name='과거 치료 관련 진단명', blank=True, default=""
+    )
     notes = models.TextField(blank=True, verbose_name='비고')
     age = models.IntegerField(verbose_name="검사 당시 나이", blank=True, null=True)
     consent = models.BooleanField(default=False)
