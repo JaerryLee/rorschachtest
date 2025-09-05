@@ -859,14 +859,14 @@ def export_structural_summary_xlsx_advanced(request, client_id):
 
         df_out = (df_sc.merge(
                     df_raw[['카드','N','Card','time','반응','질문','V','Location','Dev Qual',
-                            'loc_num','결정인','Form Quality','내용인','P','Z','특수점수']],
+                            'loc_num','결정인','Form Quality','(2)','내용인','P','Z','특수점수']],
                     on=['카드','N'], how='left')
                  )
         df_out['카드'] = pd.to_numeric(df_out['카드'], errors='coerce').fillna(0).astype(int)
         df_out = df_out.sort_values(['카드','N'], kind='mergesort')
 
         cols = ['카드','Card','N','time','반응','질문','V','Location','Dev Qual','loc_num',
-                '결정인','Form Quality','내용인','P','Z','특수점수','투사지수_T']
+                '결정인','Form Quality','(2)','내용인','P','Z','특수점수','투사지수_T']
         for i, name in enumerate(cols, start=1):
             c = ws_raw.cell(row=1, column=i, value=name)
             c.font = HDR_FONT; c.fill = PASTEL_FILL

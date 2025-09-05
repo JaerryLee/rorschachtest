@@ -895,19 +895,17 @@ def export_structural_summary_xlsx(request, client_id):
     cdi_pos  = (structural_summary.sumCDI  >= 4)
     scon_pos = (structural_summary.sumSCON >= 8)
     hvi_pos  = (structural_summary.sumHVI >= 4) and bool(structural_summary.HVI_premise)
-
     obs_pos  = bool(structural_summary.OBS_posi)
-
     obs_score = sum(1 for ch in (structural_summary.OBS or '') if ch == 'o')
 
     wsd.cell(row=summary_row, column=1,  value=cb(f"PTI={structural_summary.sumPTI}", pti_pos))
-    wsd.cell(row=summary_row, column=5,  value=cb(f"HVI={structural_summary.sumHVI}", hvi_pos))
+    wsd.cell(row=summary_row, column=3,  value=cb(f"HVI={structural_summary.sumHVI}", hvi_pos))
     wsd.cell(row=summary_row, column=6,  value=cb(f"DEPI={structural_summary.sumDEPI}", depi_pos))
     wsd.cell(row=summary_row, column=9,  value=cb(f"OBS={obs_score}", obs_pos))
     wsd.cell(row=summary_row, column=12, value=cb(f"CDI={structural_summary.sumCDI}", cdi_pos))
     wsd.cell(row=summary_row, column=15, value=cb(f"S-CON={structural_summary.sumSCON}", scon_pos))
 
-    for col in (1,5,6,9,12,15):
+    for col in (1,3,6,9,12,15):
         c = wsd.cell(row=summary_row, column=col)
         c.alignment = Alignment(horizontal='center')
         c.font = Font(bold=True)
@@ -1057,6 +1055,7 @@ def export_structural_summary_xlsx(request, client_id):
             'loc_num': rc.loc_num,
             '결정인': rc.determinants,
             'Form Quality': rc.form_qual,
+            '(2)': (rc.pair or ''),
             '내용인': rc.content,
             'P': rc.popular,
             'Z': rc.Z,
@@ -1076,6 +1075,7 @@ def export_structural_summary_xlsx(request, client_id):
         # 데이터
         for row_vals in df_raw.values.tolist():
             ws_raw.append(row_vals)
+        
         ws_raw.freeze_panes = "A2"
         ws_raw.auto_filter.ref = f"A1:{get_column_letter(ws_raw.max_column)}1"
         # 폭
