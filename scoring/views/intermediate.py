@@ -19,6 +19,8 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect, render
 from django.db.models import IntegerField, Value
 from django.db.models.functions import Cast, Coalesce
+from django.utils.text import slugify
+from urllib.parse import quote
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill

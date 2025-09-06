@@ -539,7 +539,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     wsd  = wb.create_sheet(title='하단부')
     wsi  = wb.create_sheet(title='특수지표')
     ws_raw = wb.create_sheet(title='반응별 정보')
-
+    # 상단부
     ws.sheet_view.showGridLines = False
     ws.merge_cells('A4:B4'); ws.merge_cells('A14:B14'); ws.merge_cells('A20:D20')
     ws.merge_cells('F4:H4'); ws.merge_cells('G5:H5'); ws.merge_cells('J4:K4')
@@ -671,6 +671,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         length = max(len(str(c.value)) for c in col_cells)
         ws.column_dimensions[col_cells[0].column_letter].width = max(8, min(32, int(length*1.2)))
 
+    # 하단부
     wsd.sheet_view.showGridLines = False
     wsd.merge_cells('A3:F3'); wsd.merge_cells('H3:I3'); wsd.merge_cells('K3:N3')
     wsd.merge_cells('A14:D14'); wsd.merge_cells('F14:G14'); wsd.merge_cells('I14:J14'); wsd.merge_cells('L14:M14')
@@ -728,16 +729,29 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     wsd['D15']=structural_summary.sum6;  wsd['D16']=structural_summary.Lvl_2
     wsd['D17']=structural_summary.wsum6; wsd['D18']=structural_summary.mq_minus; wsd['D19']=structural_summary.mq_none
 
+    
+    med_labels  = ['XA%','WDA%','X-%','S-','P','X+%','Xu%']                # F열(6)
+    proc_labels = ['Zf','W:D:Dd','W:M','Zd','PSV','DQ+','DQv']             # I열(9)
+    self_labels = ['Ego[3r+(2)/R]','Fr+rF','SumV','FD','An+Xy','MOR','H:(H)+Hd+(Hd)']  # L열(12)
+    for r, lbl in enumerate(med_labels, start=15):  wsd.cell(row=r, column=6, value=lbl)
+    for r, lbl in enumerate(proc_labels, start=15): wsd.cell(row=r, column=9, value=lbl)
+    for r, lbl in enumerate(self_labels, start=15): wsd.cell(row=r, column=12, value=lbl)
+
     for i, (lbl, attr) in enumerate(
         [('XA%','xa_per'),('WDA%','wda_per'),('X-%','x_minus_per'),('S-','s_minus'),
          ('P','popular'),('X+%','x_plus_per'),('Xu%','xu_per')], start=15):
         v = getattr(structural_summary, attr)
         c = wsd.cell(row=i, column=7, value=v)
-        c.number_format = "0" if isinstance(v, int) else "0.00"
+        is_int_like = isinstance(v, (int, np.integer)) or (isinstance(v, (float, np.floating)) and float(v).is_integer())
+        c.number_format = "0" if is_int_like else "0.00"
     for i, attr in enumerate(['Zf','W_D_Dd','W_M','Zd','sp_psv','dev_plus','dev_v'], start=15):
         wsd.cell(row=i, column=10, value=getattr(structural_summary, attr))
     for i, attr in enumerate(['ego','fr_rf','sum_V','fdn','an_xy','sp_mor','h_prop'], start=15):
         wsd.cell(row=i, column=13, value=getattr(structural_summary, attr))
+
+    for rr in range(15, 22):
+        for cc in (6, 7, 9, 10, 12, 13):
+            wsd.cell(row=rr, column=cc).alignment = Alignment(horizontal='center', vertical='center')
 
     row0 = 22
     def cb(txt, pos): return f"☑ {txt}" if pos else txt
@@ -750,7 +764,6 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     obs_score = sum(1 for ch in (structural_summary.OBS or '') if ch == 'o')
 
     wsd.cell(row=row0, column=1,  value=cb(f"PTI={structural_summary.sumPTI}", pti_pos)).font = HDR_FONT
-    # wsd.cell(row=row0, column=5,  value=cb("HVI", hvi_pos)).font = HDR_FONT
     hvi_cell = wsd.cell(row=row0, column=3, value=cb(f"HVI={structural_summary.sumHVI}", hvi_pos))
     hvi_cell.font = HDR_FONT
     wsd.cell(row=row0, column=6,  value=cb(f"DEPI={structural_summary.sumDEPI}", depi_pos)).font = HDR_FONT
@@ -780,7 +793,6 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         df_proc = df_raw[['ID','카드','N','반응','질문','결정인','(2)','내용인','특수점수']].copy()
         df_proc = df_proc.apply(_apply_pair_into_determinants, axis=1).drop(columns=['(2)'])
 
-        # 리소스 읽기
         rsp_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['response_score'],
                                   required_cols=['카드','토큰','품사','점수'])
         inq_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['inquiry_score'],
@@ -794,11 +806,9 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         for _df in (rsp_score, inq_score, sym_score, sc_stats, idx_stats):
             _df['카드'] = _df['카드'].astype(str)
 
-        # 토큰화
         df_proc['RESPONSE_토큰'] = df_raw['반응'].apply(lambda x: list(set(tokenize_with_pos(x))))
         df_proc['INQUIRY_토큰']  = df_raw['질문'].apply(lambda x: list(set(tokenize_with_pos(x))))
 
-        # 점수화
         df_sc = _calculate_token_score(df_proc.copy(), rsp_score, 'RESPONSE_토큰', 'RESPONSE_점수')
         df_sc = _calculate_token_score(df_sc,          inq_score,  'INQUIRY_토큰',  'INQUIRY_점수')
         df_sc  = _apply_symbol_score(df_sc, sym_score)
@@ -821,14 +831,12 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         z_cols = ['결정인_점수_z','내용인_점수_z','특수점수_점수_z','INQUIRY_점수_z','RESPONSE_점수_z']
         df_sc['투사지수_final'] = df_sc[z_cols].sum(axis=1)
 
-        # T변환
         df_sc = df_sc.merge(idx_stats, on='카드', how='left')
         df_sc['std']  = df_sc['std'].replace(0, np.nan).fillna(1.0)
         df_sc['mean'] = df_sc['mean'].fillna(0.0)
         df_sc['투사지수_T'] = 50 + 10*(df_sc['투사지수_final'] - df_sc['mean'])/df_sc['std']
         df_sc = df_sc.drop(columns=['mean','std'])
 
-        # 카드별/전체 평균
         df_card_avg = (df_sc.groupby(['ID','카드'], as_index=False)
                           .agg(투사지수_T평균=('투사지수_T','mean')))
         df_card_avg['카드'] = pd.to_numeric(df_card_avg['카드'], errors='coerce').fillna(0).astype(int)
@@ -838,16 +846,13 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         row1 = row0 + 2
         cell_tp = wsd.cell(row=row1, column=1, value='투사지표')
         cell_tp.font = HDR_FONT
-        cell_tp.fill = PASTEL_FILL   # 헤더 색 채우기
+        cell_tp.fill = PASTEL_FILL
         c_avg = wsd.cell(row=row1, column=2, value=round(overall_t, 2)); c_avg.number_format = "0.00"
         box_border(wsd, f"A{row1}:B{row1}")
-        
         row2 = row1 + 2
-        # 헤더
         wsd.merge_cells(start_row=row2, start_column=1, end_row=row2, end_column=2)
         tcell = wsd.cell(row=row2, column=1, value='카드별 투사점수'); tcell.fill = PASTEL_FILL; tcell.font = HDR_FONT
         tcell.alignment = Alignment(horizontal='center')
-        # 목록
         r = row2 + 1
         t_map = {int(k): float(v) for k, v in zip(df_card_avg['카드'], df_card_avg['투사지수_T평균'])}
         for n in range(1, 11):
@@ -925,15 +930,18 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     for i, txt in enumerate(labels, start=2):
         wsi.cell(row=i, column=4, value=txt)
         wsi.cell(row=i, column=5, value=("✔" if structural_summary.SCON[i-2] == "o" else ""))
-    wsi['E14']=structural_summary.sumSCON; wsi['E15']=structural_summary.sumSCON >= 8
+
+    wsi['D14'] = "TOTAL";      wsi['E14']=structural_summary.sumSCON
+    wsi['D15'] = "POSITIVE?";  wsi['E15']=structural_summary.sumSCON >= 8
 
     hvi_txt = ['SumT = 0','Zf>12','Zd>3.5','S>3','H+(H)+Hd+(Hd)>6','(H)+(A)+(Hd)+(Ad)>3','H+A : 4:1','Cg>3']
-    wsi['E18']=structural_summary.HVI_premise
+    wsi['D18'] = hvi_txt[0]; wsi['E18']=structural_summary.HVI_premise
     for i, txt in enumerate(hvi_txt[1:], start=19):  # 19~25
         wsi.cell(row=i, column=4, value=txt)
         wsi.cell(row=i, column=5, value=("✔" if structural_summary.HVI[i-19] == "o" else ""))
-    wsi['E26']=structural_summary.sumHVI
-    wsi['E27']=(structural_summary.sumHVI >= 4) and bool(structural_summary.HVI_premise)
+
+    wsi['D26'] = "TOTAL";      wsi['E26']=structural_summary.sumHVI
+    wsi['D27'] = "POSITIVE?";  wsi['E27']=(structural_summary.sumHVI >= 4) and bool(structural_summary.HVI_premise)
 
     obs_l = [(1,"Dd>3"),(2,"Zf>12"),(3,"Zd>3.0"),(4,"P>7"),(5,"FQ+>1")]
     for i,(n,txt) in enumerate(obs_l, start=30):
@@ -943,14 +951,11 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     for i, txt in enumerate(obs2, start=30):
         wsi.cell(row=i, column=4, value=txt)
         wsi.cell(row=i, column=5, value=("✔" if structural_summary.OBS[i+5-30] == "o" else ""))
-    wsi['E34']=structural_summary.OBS_posi
+    wsi['D34'] = "POSITIVE?";  wsi['E34']=structural_summary.OBS_posi
 
     for col_cells in wsi.columns:
         length = max(len(str(c.value)) for c in col_cells)
         wsi.column_dimensions[col_cells[0].column_letter].width = max(8, min(40, int(length*1.2)))
-
-    col_shd_blends_total = _count_col_shd_blends(response_codes)
-    
     wsdev = wb.create_sheet(title='이탈정도')
     wsdev.sheet_view.showGridLines = False
 
@@ -977,7 +982,10 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         except Exception:
             return default
         return default if v is None else v
-
+    def _get_lambda(ss):
+        F = float(_safe_get(ss, 'F', 0.0))
+        R = float(_safe_get(ss, 'R', 0.0))
+        return (F / (R - F)) if (R - F) else 0.0
     def _norm_cdf(z: float) -> float:
         return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
 
@@ -994,6 +1002,13 @@ def export_structural_summary_xlsx_advanced(request, client_id):
                 return x, 1.0
             except Exception:
                 return 0.0, 0.0
+    def _get_w_from_wm(ss):
+        a, b = _parse_ratio_pair(getattr(ss, 'W_M', None))
+        return a
+
+    def _get_m_from_wm(ss):
+        a, b = _parse_ratio_pair(getattr(ss, 'W_M', None))
+        return b
 
     CAT_COLOR = {
         '매우낮음': '92CDDC',
@@ -1049,6 +1064,8 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     def _get_human_all(ss):
         return float(_safe_get(ss, 'human_cont', 0))
 
+    col_shd_blends_total = _count_col_shd_blends(response_codes)
+
     GET = {
         'R':        lambda ss: _safe_get(ss, 'R', 0),
         'W':        lambda ss: _safe_get(ss, 'W', 0),
@@ -1075,7 +1092,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
 
         'S-':       lambda ss: _safe_get(ss, 's_minus', 0),
 
-        'M':        lambda ss: _safe_get(ss, 'M', 0),
+        'M':        _get_m_from_wm,
         'FM':       lambda ss: _safe_get(ss, 'sum_FM', _safe_get(ss, 'FM', 0)),
         'm':        lambda ss: _safe_get(ss, 'sum_m', 0),
         'FM+m':     lambda ss: _safe_get(ss, 'sum_FM', _safe_get(ss, 'FM', 0)) + _safe_get(ss, 'sum_m', 0),
@@ -1100,7 +1117,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         '2':        lambda ss: _safe_get(ss, 'pair', 0),
 
         '3r+2/R':   lambda ss: _safe_get(ss, 'ego', 0),
-        'Lambda':   lambda ss: _safe_get(ss, 'Lambda', 0),
+        'Lambda':   _get_lambda,
         'EA':       lambda ss: _safe_get(ss, 'EA', 0),
         'es':       lambda ss: _safe_get(ss, 'es', 0),
         'D score':  lambda ss: _safe_get(ss, 'D_score', 0),
@@ -1253,7 +1270,10 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         pct_cell = wsdev.cell(row=r, column=7, value=(0.0 if p is None else p))  # %
         grade_cell = wsdev.cell(row=r, column=8)
 
-        DEC2_KEYS = {"Blends/R", "Afr", "XA%", "WDA%", "X+%", "X-%", "Xu%", "Isolate/R"}
+        DEC2_KEYS = {
+            "Blends/R","Afr","XA%","WDA%","X+%","X-%","Xu%","Isolate/R",
+            "3r+2/R","Lambda","Zd","active","passive","Ma","Mp"
+        }
         if score is None:
             wsdev.cell(row=r, column=3).number_format = '@'
         else:
