@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+{% load i18n admin_urls %}
+
+{% block object-tools-items %}
+  {{ block.super }}
+  <li>
+    <a class="historylink"
+       href="{% url 'admin:scoring_client_export' object_id=original.pk %}">
+      엑셀 다운로드
+    </a>
+  </li>
+{% endblock %}

@@ -6,6 +6,8 @@ from io import BytesIO
 import json
 import re
 import math
+import io
+import zipfile
 
 import pandas as pd
 import numpy as np
@@ -48,9 +50,36 @@ from ._base import (
     to_roman,
 )
 
-
 TOTAL_CAP = 100
 DEFAULT_EXTRA = 40
+
+PASTEL_FILL = PatternFill(start_color="FCD5B4", end_color="FCD5B4", fill_type="solid")
+LINE_COLOR  = "FFB7B7B7"
+THIN_EDGE   = Side(border_style='thin', color=LINE_COLOR)
+HDR_FONT    = Font(bold=True)
+
+def box_border(ws, cell_range, line_style="thin", color="FFB7B7B7"):
+    rows = list(ws[cell_range])
+    if not rows:
+        return
+    edge = Side(style=line_style, color=color)
+    max_y = len(rows) - 1
+    for y, row in enumerate(rows):
+        max_x = len(row) - 1
+        for x, cell in enumerate(row):
+            b = cell.border
+            cell.border = Border(
+                left=edge if x == 0 else b.left,
+                right=edge if x == max_x else b.right,
+                top=edge if y == 0 else b.top,
+                bottom=edge if y == max_y else b.bottom,
+            )
+
+def header_cell(ws, addr: str, value: str):
+    ws[addr] = value
+    ws[addr].fill = PASTEL_FILL
+    ws[addr].font = HDR_FONT
+    ws[addr].alignment = Alignment(horizontal='center', vertical='center')
 
 def _normalize_text_value(v):
     if v is None:
@@ -93,12 +122,10 @@ HEADER_MAP_COMPACT = {
     '특수점수':'special','special':'special',
     '코멘트':'comment','메모':'comment','comment':'comment',
 }
-
 REQUIRED_FIELDS = [
     'card','response_num','time','response','inquiry','rotation','location',
     'dev_qual','loc_num','determinants','form_qual','pair','content','popular','Z','special','comment'
 ]
-
 def normalize_header(h):
     if h is None:
         return None
@@ -135,14 +162,12 @@ def _detect_token(s: str, token: str) -> bool:
         return False
     return re.search(rf"(^|{_TOKEN_SEP}){re.escape(token)}($|{_TOKEN_SEP})", s, flags=re.IGNORECASE) is not None
 
-
 @group_min_required('advanced')
 def advanced_entry(request):
     cid = request.GET.get('client_id') or request.GET.get('client')
     if cid:
         return redirect('scoring:advanced_upload', client_id=cid)
     return redirect(f"{reverse('scoring:client_list')}?next=advanced")
-
 
 @group_min_required('advanced')
 def advanced_upload(request, client_id):
@@ -271,11 +296,10 @@ def advanced_upload(request, client_id):
         return redirect('scoring:client_detail', client_id=client.id)
 
     return render(request, 'advanced_upload.html', {
-        'client': client, 'form': form,
+        'client': client,
+        'form': form,
         'has_existing': has_existing, 'existing_count': existing_count,
     })
-
-
 RESOURCE_DIR = Path(getattr(settings, 'SCORING_RESOURCE_DIR',
                             Path(__file__).resolve().parent.parent / 'resources')).resolve()
 
@@ -323,13 +347,11 @@ def _read_json_df(path: Path, required_cols=None) -> pd.DataFrame:
     if isinstance(raw, dict):
         rows = []
 
-        # 카드 → {mean,std}
         if all(isinstance(v, dict) and set(v.keys()) & {'mean', 'std'} for v in raw.values()):
             for card, obj in raw.items():
                 rows.append({'카드': str(card), 'mean': obj.get('mean'), 'std': obj.get('std')})
             return _ensure_required(pd.DataFrame(rows))
 
-        # 카드 → 영역 → {mean,std}
         is_area_stats = any(
             isinstance(areas, dict) and any(isinstance(v, dict) and {'mean','std'} <= set(v.keys())
                                             for v in areas.values())
@@ -345,7 +367,6 @@ def _read_json_df(path: Path, required_cols=None) -> pd.DataFrame:
                                      'mean': stat.get('mean'), 'std': stat.get('std')})
             return _ensure_required(pd.DataFrame(rows))
 
-        # 카드 → 영역 → {기호: 점수}
         is_symbol_scores = any(isinstance(areas, dict) and any(isinstance(v, dict) for v in areas.values())
                                for areas in raw.values())
         if is_symbol_scores:
@@ -379,7 +400,6 @@ def _read_json_df(path: Path, required_cols=None) -> pd.DataFrame:
 
     raise ValueError(f"{path.name} 을(를) DataFrame으로 변환할 수 없습니다.")
 
-
 STOPWORDS = set([
     '이','그','저','나','너','그것','이것','저것','들','\n','때','것','그리고','하지만','또는','즉','그렇지','그래서','그러므로',
     '대해','대하여','위해','때문에','그런데','근데','이런','저런','그런','같은','처럼','듯','도','만','또','조차','까지',
@@ -409,7 +429,6 @@ except Exception:
         toks = [t for t in re.split(r'\s+', text) if t and t not in STOPWORDS]
         toks = [t for t in toks if len(t) >= 2]
         return [(t, 'Noun') for t in toks]
-
 
 def _apply_pair_into_determinants(row):
     det = str(row.get('결정인') or '').strip()
@@ -465,81 +484,102 @@ def _count_col_shd_blends(codes):
     shading = {"FC'", "C'F", "C'", 'FT', 'TF', 'T', 'FV', 'VF', 'V', 'FY', 'YF', 'Y'}
     cnt = 0
     for rc in codes:
-        det = _normalize_text_value(getattr(rc, 'determinants', '') or '')
-        if not det:
-            continue
-        has_color = any(_detect_token(det, t) for t in color)
-        has_shading = any(_detect_token(det, t) for t in shading)
-        if has_color and has_shading:
+        det_raw = (getattr(rc, 'determinants', '') or '')
+        toks = [t.strip().upper() for t in re.split(r"[.,\s;+/]+", det_raw) if t.strip()]
+        if any(t in color for t in toks) and any(t in shading for t in toks):
             cnt += 1
     return cnt
 
-@group_min_required('advanced')
-def export_structural_summary_xlsx_advanced(request, client_id):
-    try:
-        client = Client.objects.get(id=client_id)
-        if client.tester != request.user:
-            return HttpResponse("액세스 거부: 해당 정보를 볼 수 있는 권한이 없습니다.", status=403)
+def compute_projection_metrics(response_codes):
+    df_raw = pd.DataFrame([{
+        'ID': getattr(rc.client, 'id', None),
+        '카드': normalize_card_to_num(rc.card),
+        'N': rc.response_num,
+        '반응': rc.response,
+        '질문': rc.inquiry,
+        '결정인': rc.determinants,
+        '(2)': rc.pair,
+        '내용인': rc.content,
+        '특수점수': (special := _normalize_special_tokens(rc.special or '')),
+        'Card': to_roman(rc.card),
+        'time': rc.time, 'V': rc.rotation, 'Location': rc.location, 'loc_num': rc.loc_num,
+        'Dev Qual': rc.dev_qual, 'Form Quality': rc.form_qual,
+        'P': rc.popular, 'Z': rc.Z,
+    } for rc in response_codes])
 
-        response_codes = ResponseCode.objects.filter(client_id=client_id)
+    df_proc = df_raw[['ID','카드','N','반응','질문','결정인','(2)','내용인','특수점수']].copy()
+    df_proc = df_proc.apply(_apply_pair_into_determinants, axis=1).drop(columns=['(2)'])
 
-        numbers_found = {normalize_card_to_num(rc.card) for rc in response_codes if rc.card}
-        required = {str(i) for i in range(1, 11)}
-        missing = sorted(required - numbers_found, key=int)
-        if missing:
-            missing_roman = [to_roman(n) for n in missing]
-            return HttpResponse("다음 카드의 반응이 없습니다: " + ", ".join(missing_roman))
+    rsp_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['response_score'],
+                              required_cols=['카드','토큰','품사','점수'])
+    inq_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['inquiry_score'],
+                              required_cols=['카드','토큰','품사','점수'])
+    sym_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['symbol_score'],
+                              required_cols=['카드','채점영역','기호','점수'])
+    sc_stats  = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['score_stats'],
+                              required_cols=['카드','채점영역','mean','std'])
+    idx_stats = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['index_stats'],
+                              required_cols=['카드','mean','std'])
+    for _df in (rsp_score, inq_score, sym_score, sc_stats, idx_stats):
+        _df['카드'] = _df['카드'].astype(str)
 
-        structural_summary, _ = StructuralSummary.objects.get_or_create(client_id=client_id)
-        try:
-            structural_summary.calculate_values()
-        except Exception:
-            structural_summary.save()
+    df_proc['RESPONSE_토큰'] = df_raw['반응'].apply(lambda x: list(set(tokenize_with_pos(x))))
+    df_proc['INQUIRY_토큰']  = df_raw['질문'].apply(lambda x: list(set(tokenize_with_pos(x))))
 
-    except Client.DoesNotExist:
-        logging.error("해당 ID의 클라이언트를 찾을 수 없음")
-        return HttpResponseNotFound("클라이언트 정보를 찾을 수 없습니다.")
-    except Exception as e:
-        logging.error(f"예기치 못한 오류 발생: {e}")
-        return JsonResponse({'error': f"{type(e).__name__}: {str(e)}"}, status=500)
+    df_sc = _calculate_token_score(df_proc.copy(), rsp_score, 'RESPONSE_토큰', 'RESPONSE_점수')
+    df_sc = _calculate_token_score(df_sc,          inq_score,  'INQUIRY_토큰',  'INQUIRY_점수')
+    df_sc  = _apply_symbol_score(df_sc, sym_score)
 
-    PASTEL_FILL = PatternFill(start_color="FCD5B4", end_color="FCD5B4", fill_type="solid")
-    LINE_COLOR  = "FFB7B7B7" 
-    THIN_EDGE   = Side(border_style='thin', color=LINE_COLOR)
-    HDR_FONT    = Font(bold=True)
+    mean_df = sc_stats.pivot(index='카드', columns='채점영역', values='mean')
+    std_df  = sc_stats.pivot(index='카드', columns='채점영역', values='std')
+    for a in ['RESPONSE_점수','INQUIRY_점수','결정인_점수','내용인_점수','특수점수_점수']:
+        colz = f'{a}_z'
+        if a in df_sc.columns and a in mean_df.columns:
+            def _z(r, aa=a):
+                c = str(r['카드'])
+                try:
+                    m = float(mean_df.loc[c, aa]); s = float(std_df.loc[c, aa])
+                    return (r[aa]-m)/s if s else 0.0
+                except Exception:
+                    return 0.0
+            df_sc[colz] = df_sc.apply(_z, axis=1)
+        else:
+            df_sc[colz] = 0.0
+    z_cols = ['결정인_점수_z','내용인_점수_z','특수점수_점수_z','INQUIRY_점수_z','RESPONSE_점수_z']
+    df_sc['투사지수_final'] = df_sc[z_cols].sum(axis=1)
 
-    def box_border(ws, cell_range, line_style="thin", color="FFB7B7B7"):
-        rows = list(ws[cell_range])
-        if not rows:
-            return
-        edge = Side(style=line_style, color=color)
-        max_y = len(rows) - 1
-        for y, row in enumerate(rows):
-            max_x = len(row) - 1
-            for x, cell in enumerate(row):
-                b = cell.border
-                cell.border = Border(
-                    left=edge if x == 0 else b.left,
-                    right=edge if x == max_x else b.right,
-                    top=edge if y == 0 else b.top,
-                    bottom=edge if y == max_y else b.bottom,
-                )
+    df_sc = df_sc.merge(idx_stats, on='카드', how='left')
+    df_sc['std']  = df_sc['std'].replace(0, np.nan).fillna(1.0)
+    df_sc['mean'] = df_sc['mean'].fillna(0.0)
+    df_sc['투사지수_T'] = 50 + 10*(df_sc['투사지수_final'] - df_sc['mean'])/df_sc['std']
+    df_sc = df_sc.drop(columns=['mean','std'])
 
-    def header_cell(ws, addr: str, value: str):
-        ws[addr] = value
-        ws[addr].fill = PASTEL_FILL
-        ws[addr].font = HDR_FONT
-        ws[addr].alignment = Alignment(horizontal='center', vertical='center')
+    df_card_avg = (df_sc.groupby(['ID','카드'], as_index=False)
+                      .agg(투사지수_T평균=('투사지수_T','mean')))
+    df_card_avg['카드'] = pd.to_numeric(df_card_avg['카드'], errors='coerce').fillna(0).astype(int)
+    df_card_avg = df_card_avg.sort_values(['ID','카드'])
+    t_map = {int(k): float(v) for k, v in zip(df_card_avg['카드'], df_card_avg['투사지수_T평균'])}
+    overall_t = float(df_card_avg['투사지수_T평균'].mean()) if not df_card_avg.empty else float(df_sc['투사지수_T'].mean())
 
-    wb = Workbook()
-    if 'Sheet' in wb.sheetnames:
-        wb.remove(wb['Sheet'])
+    df_sc['카드']  = df_sc['카드'].astype(str)
+    df_raw['카드'] = df_raw['카드'].astype(str)
+    df_sc['N']    = pd.to_numeric(df_sc['N'], errors='coerce')
+    df_raw['N']   = pd.to_numeric(df_raw['N'], errors='coerce')
 
-    ws   = wb.create_sheet(title='상단부')
-    wsd  = wb.create_sheet(title='하단부')
-    wsi  = wb.create_sheet(title='특수지표')
-    ws_raw = wb.create_sheet(title='반응별 정보')
-    # 상단부
+    df_sc = df_sc.drop(columns=['결정인','내용인','특수점수'], errors='ignore')
+
+    right_cols = ['카드','N','Card','time','반응','질문','V','Location','Dev Qual',
+                  'loc_num','결정인','Form Quality','(2)','내용인','P','Z','특수점수']
+    df_sc = df_sc.merge(df_raw[right_cols], on=['카드','N'], how='left')
+
+    df_sc['카드'] = pd.to_numeric(df_sc['카드'], errors='coerce').fillna(0).astype(int)
+    df_sc = df_sc.sort_values(['카드','N'], kind='mergesort')
+    df_out = df_sc
+
+    return overall_t, t_map, df_out
+
+def _add_upper_sheet(wb, structural_summary):
+    ws = wb.create_sheet(title='상단부')
     ws.sheet_view.showGridLines = False
     ws.merge_cells('A4:B4'); ws.merge_cells('A14:B14'); ws.merge_cells('A20:D20')
     ws.merge_cells('F4:H4'); ws.merge_cells('G5:H5'); ws.merge_cells('J4:K4')
@@ -599,11 +639,11 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     blends_str = getattr(structural_summary, 'blends', '') or ''
     blends_list = [b.strip() for b in str(blends_str).split(',') if b.strip()]
 
-    row = 6 
+    row = 6
     for b in blends_list:
         ws.cell(row=row, column=6, value=b)  # column=6 → 'F'
         row += 1
-    
+
     fields = ['M','FM','m',"FC","CF","C","Cn","FC'","C'F","C'",
               'FT','TF','T','FV','VF','V','FY','YF','Y','Fr','rF','FD','F','(2)']
     real_field = ['M','FM','m_l','FC','CF','C','Cn','FCa','CaF','Ca',
@@ -638,7 +678,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     ws['N13']=structural_summary.app_IX; ws['N14']=structural_summary.app_X
 
     header_cell(ws, 'M16', 'Special Scores')
-    ws['N17']='Lvl-1' 
+    ws['N17']='Lvl-1'
     ws['O17']='Lvl-2'
     for i, name in enumerate(['DV','INC','DR','FAB','ALOG','CON'], start=18):
         ws.cell(row=i, column=13, value=name)  # M열 라벨
@@ -670,8 +710,10 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     for col_cells in ws.columns:
         length = max(len(str(c.value)) for c in col_cells)
         ws.column_dimensions[col_cells[0].column_letter].width = max(8, min(32, int(length*1.2)))
+    return ws
 
-    # 하단부
+def _add_lower_sheet(wb, structural_summary, *, overall_t=None, card_t_map=None):
+    wsd = wb.create_sheet(title='하단부')
     wsd.sheet_view.showGridLines = False
     wsd.merge_cells('A3:F3'); wsd.merge_cells('H3:I3'); wsd.merge_cells('K3:N3')
     wsd.merge_cells('A14:D14'); wsd.merge_cells('F14:G14'); wsd.merge_cells('I14:J14'); wsd.merge_cells('L14:M14')
@@ -729,7 +771,6 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     wsd['D15']=structural_summary.sum6;  wsd['D16']=structural_summary.Lvl_2
     wsd['D17']=structural_summary.wsum6; wsd['D18']=structural_summary.mq_minus; wsd['D19']=structural_summary.mq_none
 
-    
     med_labels  = ['XA%','WDA%','X-%','S-','P','X+%','Xu%']                # F열(6)
     proc_labels = ['Zf','W:D:Dd','W:M','Zd','PSV','DQ+','DQv']             # I열(9)
     self_labels = ['Ego[3r+(2)/R]','Fr+rF','SumV','FD','An+Xy','MOR','H:(H)+Hd+(Hd)']  # L열(12)
@@ -773,131 +814,31 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     for col in (1,3,6,9,12,15):
         wsd.cell(row=row0, column=col).alignment = Alignment(horizontal='center')
 
-    try:
-        df_raw = pd.DataFrame([{
-            'ID': client.id,
-            '카드': normalize_card_to_num(rc.card),
-            'N': rc.response_num,
-            '반응': rc.response,
-            '질문': rc.inquiry,
-            '결정인': rc.determinants,
-            '(2)': rc.pair,
-            '내용인': rc.content,
-            '특수점수': (special := _normalize_special_tokens(rc.special or '')),
-            'Card': to_roman(rc.card),
-            'time': rc.time, 'V': rc.rotation, 'Location': rc.location, 'loc_num': rc.loc_num,
-            'Dev Qual': rc.dev_qual, 'Form Quality': rc.form_qual,
-            'P': rc.popular, 'Z': rc.Z,
-        } for rc in response_codes])
-
-        df_proc = df_raw[['ID','카드','N','반응','질문','결정인','(2)','내용인','특수점수']].copy()
-        df_proc = df_proc.apply(_apply_pair_into_determinants, axis=1).drop(columns=['(2)'])
-
-        rsp_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['response_score'],
-                                  required_cols=['카드','토큰','품사','점수'])
-        inq_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['inquiry_score'],
-                                  required_cols=['카드','토큰','품사','점수'])
-        sym_score = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['symbol_score'],
-                                  required_cols=['카드','채점영역','기호','점수'])
-        sc_stats  = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['score_stats'],
-                                  required_cols=['카드','채점영역','mean','std'])
-        idx_stats = _read_json_df(RESOURCE_DIR / RESOURCE_FILENAMES['index_stats'],
-                                  required_cols=['카드','mean','std'])
-        for _df in (rsp_score, inq_score, sym_score, sc_stats, idx_stats):
-            _df['카드'] = _df['카드'].astype(str)
-
-        df_proc['RESPONSE_토큰'] = df_raw['반응'].apply(lambda x: list(set(tokenize_with_pos(x))))
-        df_proc['INQUIRY_토큰']  = df_raw['질문'].apply(lambda x: list(set(tokenize_with_pos(x))))
-
-        df_sc = _calculate_token_score(df_proc.copy(), rsp_score, 'RESPONSE_토큰', 'RESPONSE_점수')
-        df_sc = _calculate_token_score(df_sc,          inq_score,  'INQUIRY_토큰',  'INQUIRY_점수')
-        df_sc  = _apply_symbol_score(df_sc, sym_score)
-
-        mean_df = sc_stats.pivot(index='카드', columns='채점영역', values='mean')
-        std_df  = sc_stats.pivot(index='카드', columns='채점영역', values='std')
-        for a in ['RESPONSE_점수','INQUIRY_점수','결정인_점수','내용인_점수','특수점수_점수']:
-            colz = f'{a}_z'
-            if a in df_sc.columns and a in mean_df.columns:
-                def _z(r, aa=a):
-                    c = str(r['카드'])
-                    try:
-                        m = float(mean_df.loc[c, aa]); s = float(std_df.loc[c, aa])
-                        return (r[aa]-m)/s if s else 0.0
-                    except Exception:
-                        return 0.0
-                df_sc[colz] = df_sc.apply(_z, axis=1)
-            else:
-                df_sc[colz] = 0.0
-        z_cols = ['결정인_점수_z','내용인_점수_z','특수점수_점수_z','INQUIRY_점수_z','RESPONSE_점수_z']
-        df_sc['투사지수_final'] = df_sc[z_cols].sum(axis=1)
-
-        df_sc = df_sc.merge(idx_stats, on='카드', how='left')
-        df_sc['std']  = df_sc['std'].replace(0, np.nan).fillna(1.0)
-        df_sc['mean'] = df_sc['mean'].fillna(0.0)
-        df_sc['투사지수_T'] = 50 + 10*(df_sc['투사지수_final'] - df_sc['mean'])/df_sc['std']
-        df_sc = df_sc.drop(columns=['mean','std'])
-
-        df_card_avg = (df_sc.groupby(['ID','카드'], as_index=False)
-                          .agg(투사지수_T평균=('투사지수_T','mean')))
-        df_card_avg['카드'] = pd.to_numeric(df_card_avg['카드'], errors='coerce').fillna(0).astype(int)
-        df_card_avg = df_card_avg.sort_values(['ID','카드'])
-        overall_t = float(df_card_avg['투사지수_T평균'].mean()) if not df_card_avg.empty else float(df_sc['투사지수_T'].mean())
-
+    if (overall_t is not None) and (card_t_map is not None):
         row1 = row0 + 2
-        cell_tp = wsd.cell(row=row1, column=1, value='투사지표')
-        cell_tp.font = HDR_FONT
-        cell_tp.fill = PASTEL_FILL
+        cell_tp = wsd.cell(row=row1, column=1, value='투사지표'); cell_tp.font = HDR_FONT; cell_tp.fill = PASTEL_FILL
         c_avg = wsd.cell(row=row1, column=2, value=round(overall_t, 2)); c_avg.number_format = "0.00"
         box_border(wsd, f"A{row1}:B{row1}")
+
         row2 = row1 + 2
         wsd.merge_cells(start_row=row2, start_column=1, end_row=row2, end_column=2)
         tcell = wsd.cell(row=row2, column=1, value='카드별 투사점수'); tcell.fill = PASTEL_FILL; tcell.font = HDR_FONT
         tcell.alignment = Alignment(horizontal='center')
         r = row2 + 1
-        t_map = {int(k): float(v) for k, v in zip(df_card_avg['카드'], df_card_avg['투사지수_T평균'])}
-        for n in range(1, 11):
+        for n in range(1, 10+1):
             wsd.cell(row=r, column=1, value=to_roman(str(n)))
-            c = wsd.cell(row=r, column=2, value=None if t_map.get(n) is None else round(t_map.get(n), 2))
+            v = card_t_map.get(n)
+            c = wsd.cell(row=r, column=2, value=None if v is None else round(v, 2))
             c.number_format = "0.00"; r += 1
         box_border(wsd, f"A{row2}:B{r-1}")
-        df_sc = df_sc.drop(columns=['반응', '질문', '결정인', '내용인', '특수점수'], errors='ignore')
 
-        df_out = (df_sc.merge(
-                    df_raw[['카드','N','Card','time','반응','질문','V','Location','Dev Qual',
-                            'loc_num','결정인','Form Quality','(2)','내용인','P','Z','특수점수']],
-                    on=['카드','N'], how='left')
-                 )
-        df_out['카드'] = pd.to_numeric(df_out['카드'], errors='coerce').fillna(0).astype(int)
-        df_out = df_out.sort_values(['카드','N'], kind='mergesort')
+    for col_cells in wsd.columns:
+        length = max(len(str(c.value)) for c in col_cells)
+        wsd.column_dimensions[col_cells[0].column_letter].width = max(8, min(40, int(length*1.2)))
+    return wsd
 
-        cols = ['카드','Card','N','time','반응','질문','V','Location','Dev Qual','loc_num',
-                '결정인','Form Quality','(2)','내용인','P','Z','특수점수','투사지수_T']
-        for i, name in enumerate(cols, start=1):
-            c = ws_raw.cell(row=1, column=i, value=name)
-            c.font = HDR_FONT; c.fill = PASTEL_FILL
-            c.alignment = Alignment(horizontal='center', vertical='center')
-            c.border = Border(top=THIN_EDGE, bottom=THIN_EDGE, left=THIN_EDGE, right=THIN_EDGE)
-
-        for rowv in df_out[cols].values.tolist():
-            ws_raw.append(rowv)
-
-        ws_raw.freeze_panes = "A2"
-        ws_raw.auto_filter.ref = f"A1:{get_column_letter(ws_raw.max_column)}1"
-
-        for col in range(1, ws_raw.max_column + 1):
-            max_len = 0
-            for r_ in range(1, ws_raw.max_row + 1):
-                v = ws_raw.cell(row=r_, column=col).value
-                max_len = max(max_len, len(str(v)) if v is not None else 0)
-            ws_raw.column_dimensions[get_column_letter(col)].width = max(8, min(80, int(max_len * 1.1)))
-
-    except Exception as e:
-        logging.exception("고급 산출 실패")
-        ws_err = wb.create_sheet(title='advanced_error')
-        ws_err['A1'] = "고급 산출 과정에서 오류가 발생했습니다."
-        ws_err['A2'] = f"{type(e).__name__}: {str(e)}"
-        ws_err.column_dimensions['A'].width = 120
-
+def _add_special_indices_sheet(wb, structural_summary):
+    wsi = wb.create_sheet(title='특수지표')
     header_cell(wsi, 'A1', "PTI"); header_cell(wsi, 'A9', "DEPI"); header_cell(wsi, 'A20', "CDI")
     header_cell(wsi, 'D1', "S-CON"); header_cell(wsi, 'D17', "HVI"); header_cell(wsi, 'A29', "OBS")
 
@@ -956,6 +897,43 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     for col_cells in wsi.columns:
         length = max(len(str(c.value)) for c in col_cells)
         wsi.column_dimensions[col_cells[0].column_letter].width = max(8, min(40, int(length*1.2)))
+    return wsi
+
+def _add_raw_responses_sheet(wb, df_out):
+    ws_raw = wb.create_sheet(title='반응별 정보')
+    def _unsuffix(df, names):
+        rename = {}
+        for nm in names:
+            if nm not in df.columns:
+                for sfx in ('_x','_y'):
+                    if nm+sfx in df.columns:
+                        rename[nm+sfx] = nm
+                        break
+        return df.rename(columns=rename)
+    cols = ['카드','Card','N','time','반응','질문','V','Location','Dev Qual','loc_num',
+            '결정인','Form Quality','(2)','내용인','P','Z','특수점수','투사지수_T']
+    df_out = _unsuffix(df_out, cols)
+    for i, name in enumerate(cols, start=1):
+        c = ws_raw.cell(row=1, column=i, value=name)
+        c.font = HDR_FONT; c.fill = PASTEL_FILL
+        c.alignment = Alignment(horizontal='center', vertical='center')
+        c.border = Border(top=THIN_EDGE, bottom=THIN_EDGE, left=THIN_EDGE, right=THIN_EDGE)
+
+    for rowv in df_out[cols].values.tolist():
+        ws_raw.append(rowv)
+
+    ws_raw.freeze_panes = "A2"
+    ws_raw.auto_filter.ref = f"A1:{get_column_letter(ws_raw.max_column)}1"
+
+    for col in range(1, ws_raw.max_column + 1):
+        max_len = 0
+        for r_ in range(1, ws_raw.max_row + 1):
+            v = ws_raw.cell(row=r_, column=col).value
+            max_len = max(max_len, len(str(v)) if v is not None else 0)
+        ws_raw.column_dimensions[get_column_letter(col)].width = max(8, min(80, int(max_len * 1.1)))
+    return ws_raw
+
+def _add_deviation_sheet(wb, structural_summary, response_codes):
     wsdev = wb.create_sheet(title='이탈정도')
     wsdev.sheet_view.showGridLines = False
 
@@ -982,10 +960,12 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         except Exception:
             return default
         return default if v is None else v
+
     def _get_lambda(ss):
         F = float(_safe_get(ss, 'F', 0.0))
         R = float(_safe_get(ss, 'R', 0.0))
         return (F / (R - F)) if (R - F) else 0.0
+
     def _norm_cdf(z: float) -> float:
         return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
 
@@ -1002,6 +982,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
                 return x, 1.0
             except Exception:
                 return 0.0, 0.0
+
     def _get_w_from_wm(ss):
         a, b = _parse_ratio_pair(getattr(ss, 'W_M', None))
         return a
@@ -1041,12 +1022,23 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         a, b = _parse_ratio_pair(_safe_get(ss, 'Ma_Mp', '0:0'))
         return b
     def _get_sumc(ss):
-        return float(_safe_get(ss, 'FC', 0)) + float(_safe_get(ss, 'CF', 0)) + float(_safe_get(ss, 'C', 0)) + float(_safe_get(ss, 'Cn', 0))
+        fc, cf_plus_c = _parse_ratio_pair(_safe_get(ss, 'f_c_prop', '0:0'))
+        return float(fc) + float(cf_plus_c)
+
+    def _get_fc_from_ratio(ss):
+        fc, _ = _parse_ratio_pair(_safe_get(ss, 'f_c_prop', '0:0'))
+        return float(fc)
+
+    def _get_cf_total(ss):
+        _, cf_plus_c = _parse_ratio_pair(_safe_get(ss, 'f_c_prop', '0:0'))
+        c = float(_safe_get(ss, 'pure_c', 0))
+        return float(cf_plus_c) - c
+
     def _get_wsumc(ss):
-        v = getattr(ss, 'WsumC', None)
-        if v is None:
-            v = _safe_get(ss, 'sum_Ca', 0)
-        return float(v)
+        _, w = _parse_ratio_pair(_safe_get(ss, 'ca_c_prop', '0:0'))
+        return float(w)
+
+
     def _get_sumc_prime(ss):
         return float(_safe_get(ss, 'sum_Ca', 0))
     def _get_sumsh(ss):
@@ -1097,12 +1089,12 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         'm':        lambda ss: _safe_get(ss, 'sum_m', 0),
         'FM+m':     lambda ss: _safe_get(ss, 'sum_FM', _safe_get(ss, 'FM', 0)) + _safe_get(ss, 'sum_m', 0),
 
-        'FC':       lambda ss: _safe_get(ss, 'FC', 0),
-        'CF':       lambda ss: _safe_get(ss, 'CF', 0),
-        'C':        lambda ss: _safe_get(ss, 'C', 0),
+        'FC':       _get_fc_from_ratio,
+        'CF':       _get_cf_total,
+        'C':        lambda ss: _safe_get(ss, 'pure_c', 0),
         'Cn':       lambda ss: _safe_get(ss, 'Cn', 0),
 
-        'SumC':     _get_sumc,
+        'SumC':     _get_sumc,  
         'WSumC':    _get_wsumc,
         "SumC'":    _get_sumc_prime,
         'SumT':     lambda ss: _safe_get(ss, 'sum_T', 0),
@@ -1111,7 +1103,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         'SumSh':    _get_sumsh,
 
         'Fr+rF':    lambda ss: _safe_get(ss, 'fr_rf', 0),
-        'FD':       lambda ss: _safe_get(ss, 'FD', 0),
+        'FD':       lambda ss: _safe_get(ss, 'fdn', 0),
 
         'F':        lambda ss: _safe_get(ss, 'F', 0),
         '2':        lambda ss: _safe_get(ss, 'pair', 0),
@@ -1123,10 +1115,10 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         'D score':  lambda ss: _safe_get(ss, 'D_score', 0),
         'Adj D':    lambda ss: _safe_get(ss, 'adj_D', 0),
 
-        'active':   _get_active,
-        'passive':  _get_passive,
-        'Ma':       _get_ma,
-        'Mp':       _get_mp,
+        'active':   lambda ss: _safe_get(ss, 'a_p', '0:0').split(':')[0],
+        'passive':  lambda ss: _safe_get(ss, 'a_p', '0:0').split(':')[-1],
+        'Ma':       lambda ss: _safe_get(ss, 'Ma_Mp', '0:0').split(':')[0],
+        'Mp':       lambda ss: _safe_get(ss, 'Ma_Mp', '0:0').split(':')[-1],
         'Intellect':lambda ss: _safe_get(ss, 'intel', 0),
 
         'Zf':       lambda ss: _safe_get(ss, 'Zf', 0),
@@ -1134,7 +1126,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
 
         'Blends':   _get_blends_count,
         'Blends/R': _get_blends_ratio,
-        'Col-Shd Blends': lambda ss, v=col_shd_blends_total: v,
+        'Col-Shd Blends': lambda ss, v=_count_col_shd_blends(response_codes): v,
 
         'Afr':      lambda ss: _safe_get(ss, 'afr', 0),
 
@@ -1152,7 +1144,7 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         'Hd':       lambda ss: _safe_get(ss, 'Hd', 0),
         '(Hd)':     lambda ss: _safe_get(ss, 'Hd_paren', 0),
         'Hx':       lambda ss: _safe_get(ss, 'Hx', 0),
-        'All H cont': _get_human_all,
+        'All H cont': lambda ss: _safe_get(ss, 'human_cont', 0),
         'A':        lambda ss: _safe_get(ss, 'A', 0),
         '(A)':      lambda ss: _safe_get(ss, 'A_paren', 0),
         'Ad':       lambda ss: _safe_get(ss, 'Ad', 0),
@@ -1261,13 +1253,13 @@ def export_structural_summary_xlsx_advanced(request, client_id):
             z = (score - float(mean)) / float(std)
             p = _norm_cdf(z)
 
-        wsdev.cell(row=r, column=1, value=idx)             # No
-        wsdev.cell(row=r, column=2, value=name)            # 변인
-        wsdev.cell(row=r, column=3, value=score)           # 점수
-        wsdev.cell(row=r, column=4, value=float(mean))     # 평균(국제)
-        wsdev.cell(row=r, column=5, value=float(std))      # 표준편차
-        wsdev.cell(row=r, column=6, value=(0.0 if z is None else z))  # Z
-        pct_cell = wsdev.cell(row=r, column=7, value=(0.0 if p is None else p))  # %
+        wsdev.cell(row=r, column=1, value=idx)
+        wsdev.cell(row=r, column=2, value=name)
+        wsdev.cell(row=r, column=3, value=score)
+        wsdev.cell(row=r, column=4, value=float(mean))
+        wsdev.cell(row=r, column=5, value=float(std))
+        wsdev.cell(row=r, column=6, value=(0.0 if z is None else z))
+        pct_cell = wsdev.cell(row=r, column=7, value=(0.0 if p is None else p))
         grade_cell = wsdev.cell(row=r, column=8)
 
         DEC2_KEYS = {
@@ -1297,10 +1289,9 @@ def export_structural_summary_xlsx_advanced(request, client_id):
         r += 1
 
     last_row = wsdev.max_row
-
-    IDX_FILL  = PatternFill(start_color="EEECE1", end_color="EEECE1", fill_type="solid")  # A열
-    META_FILL = PatternFill(start_color="FDE9D9", end_color="FDE9D9", fill_type="solid")  # B,D,E,F,G
-    POINT_FILL= PatternFill(start_color="FABF8F", end_color="FABF8F", fill_type="solid")  # C열
+    IDX_FILL  = PatternFill(start_color="EEECE1", end_color="EEECE1", fill_type="solid")
+    META_FILL = PatternFill(start_color="FDE9D9", end_color="FDE9D9", fill_type="solid")
+    POINT_FILL= PatternFill(start_color="FABF8F", end_color="FABF8F", fill_type="solid")
 
     for rr in range(3, last_row + 1):
         wsdev.cell(row=rr, column=1).fill = IDX_FILL
@@ -1319,12 +1310,121 @@ def export_structural_summary_xlsx_advanced(request, client_id):
             else:
                 cell.alignment = Alignment(horizontal='center', vertical='center')
 
-    widths = [6, 14, 9, 12, 10, 7, 8, 12]  # A~H
+    widths = [6, 14, 9, 12, 10, 7, 8, 12]
     for i, w in enumerate(widths, start=1):
         wsdev.column_dimensions[get_column_letter(i)].width = w
 
     wsdev.auto_filter.ref = f"A2:H{last_row}"
     wsdev.freeze_panes = "A3"
+    return wsdev
+
+def _append_client_info_sheet(wb, client):
+    ws = wb.create_sheet(title="검사·수검자 정보")
+    HDR = Font(bold=True)
+
+    def _val(name, default=""):
+        v = getattr(client, name, default)
+        return "" if v is None else v
+    
+    def _display(field):
+        disp = f"get_{field}_display"
+        if hasattr(client, disp):
+            try:
+                return getattr(client, disp)() or ""
+            except Exception:
+                pass
+        return _val(field, "")
+    
+    tester_u = getattr(client.tester, "username", "") if getattr(client, "tester", None) else ""
+
+    rows = [
+        ("검사자 계정", tester_u),
+        ("검사자 이름(실명)", _val("examiner_name")),
+        ("수검자 이름", _val("name")),
+        ("성별", _display("gender")),
+        ("생년월일", _val("birthdate")),
+        ("검사일", _val("testDate")),
+        ("검사 당시 나이", _val("age")),
+        ("평가 목적", _val("evaluation_purpose")),
+        ("로르샤흐 검사 수검 이력", _display("rorschach_history")),
+        ("현재 정신과 치료 유무", _display("current_psych_treatment")),
+        ("현재 치료 관련 진단명", _val("current_psych_dx")),
+        ("과거 정신과 치료 유무", _display("past_psych_treatment")),
+        ("과거 치료 관련 진단명", _val("past_psych_dx")),
+        ("동의(Consent)", "예" if bool(getattr(client, "consent", False)) else "아니오"),
+        ("비고", _val("notes")),
+    ]
+
+    for r, (k, v) in enumerate(rows, start=1):
+        ws.cell(row=r, column=1, value=k).font = HDR
+        ws.cell(row=r, column=2, value=v)
+
+    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["B"].width = 60
+    for rr in range(1, len(rows)+1):
+        ws.cell(row=rr, column=1).alignment = Alignment(horizontal='left', vertical='center')
+        ws.cell(row=rr, column=2).alignment = Alignment(horizontal='left', vertical='center')
+    return ws
+
+def create_advanced_workbook(client, response_codes, structural_summary, *, include_info_sheet=False):
+    wb = Workbook()
+    if 'Sheet' in wb.sheetnames:
+        wb.remove(wb['Sheet'])
+
+    try:
+        overall_t, card_t_map, df_out = compute_projection_metrics(response_codes)
+    except Exception:
+        logging.exception("투사지표 계산 실패")
+        overall_t, card_t_map, df_out = None, None, pd.DataFrame(columns=[
+            '카드','Card','N','time','반응','질문','V','Location','Dev Qual','loc_num',
+            '결정인','Form Quality','(2)','내용인','P','Z','특수점수','투사지수_T'
+        ])
+
+    _add_upper_sheet(wb, structural_summary)
+    _add_lower_sheet(wb, structural_summary, overall_t=overall_t, card_t_map=card_t_map)
+    _add_special_indices_sheet(wb, structural_summary)
+    _add_raw_responses_sheet(wb, df_out)
+    _add_deviation_sheet(wb, structural_summary, response_codes)
+
+    if include_info_sheet:
+        _append_client_info_sheet(wb, client)
+    return wb
+
+@group_min_required('advanced')
+def export_structural_summary_xlsx_advanced(request, client_id):
+    try:
+        client = Client.objects.get(id=client_id)
+        if client.tester != request.user:
+            return HttpResponse("액세스 거부: 해당 정보를 볼 수 있는 권한이 없습니다.", status=403)
+
+        response_codes = ResponseCode.objects.filter(client_id=client_id)
+
+        numbers_found = {normalize_card_to_num(rc.card) for rc in response_codes if rc.card}
+        required = {str(i) for i in range(1, 11)}
+        missing = sorted(required - numbers_found, key=int)
+        if missing:
+            missing_roman = [to_roman(n) for n in missing]
+            return HttpResponse("다음 카드의 반응이 없습니다: " + ", ".join(missing_roman))
+
+        structural_summary, _ = StructuralSummary.objects.get_or_create(client_id=client_id)
+        try:
+            structural_summary.calculate_values()
+        except Exception:
+            structural_summary.save()
+
+    except Client.DoesNotExist:
+        logging.error("해당 ID의 클라이언트를 찾을 수 없음")
+        return HttpResponseNotFound("클라이언트 정보를 찾을 수 없습니다.")
+    except Exception as e:
+        logging.error(f"예기치 못한 오류 발생: {e}")
+        return JsonResponse({'error': f"{type(e).__name__}: {str(e)}"}, status=500)
+
+    wb = create_advanced_workbook(
+        client,
+        response_codes,
+        structural_summary,
+        include_info_sheet=(request.user.is_staff),  # 관리자는 정보 시트 포함
+    )
 
     output = BytesIO()
     wb.save(output)
@@ -1341,6 +1441,45 @@ def export_structural_summary_xlsx_advanced(request, client_id):
     )
     return response
 
+def build_client_xlsx_bytes(client, *, include_info_sheet=False):
+    response_codes = ResponseCode.objects.filter(client=client)
+
+    numbers_found = {normalize_card_to_num(rc.card) for rc in response_codes if rc.card}
+    required = {str(i) for i in range(1, 11)}
+    missing = sorted(required - numbers_found, key=int)
+    if missing:
+        missing_roman = [to_roman(n) for n in missing]
+        wb = Workbook()
+        ws = wb.active; ws.title = "error"
+        ws["A1"] = "다음 카드의 반응이 없습니다:"
+        ws["A2"] = ", ".join(missing_roman)
+        
+        bio = BytesIO(); wb.save(bio); bio.seek(0)
+        if getattr(client, "testDate", None):
+            safe_name = f"{client.name}_{client.testDate:%Y-%m-%d}.xlsx"
+        else:
+            safe_name = f"{client.name}_MISSING.xlsx"
+        
+        return safe_name, bio.getvalue()
+
+    structural_summary, _ = StructuralSummary.objects.get_or_create(client=client)
+    try:
+        structural_summary.calculate_values()
+    except Exception:
+        structural_summary.save()
+
+    wb = create_advanced_workbook(
+        client, response_codes, structural_summary, include_info_sheet=include_info_sheet
+    )
+    bio = BytesIO(); wb.save(bio); bio.seek(0)
+
+    if getattr(client, "testDate", None):
+        safe_name = f"{client.name}_{client.testDate:%Y-%m-%d}.xlsx"
+        fallback  = f"{slugify(client.name)}_{client.testDate:%Y-%m-%d}.xlsx"
+    else:
+        safe_name = f"{client.name}.xlsx"
+        fallback  = f"{slugify(client.name)}.xlsx"
+    return safe_name, bio.getvalue()
 
 @group_min_required('advanced')
 def advanced_edit_responses(request, client_id):
